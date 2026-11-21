@@ -36,6 +36,7 @@ Y.renderPdf = function (pg) {
     const rs = pg.rs || 1, vp = page.getViewport({ scale: (P.W * rs) / v0.width });
     pg.bg.width = Math.round(vp.width); pg.bg.height = Math.round(vp.height);
     pg.task = page.render({ canvasContext: pg.bg.getContext('2d'), viewport: vp });
+    Y.pdfText(doc, idx);
     return pg.task.promise.then(() => { if (my === pg.token) pg.el.classList.remove('loading'); });
   }).catch(e => { if (!e || e.name !== 'RenderingCancelledException') console.warn(e); });
 };
@@ -46,6 +47,82 @@ Y.pdfThumb = function (doc, idx, canvas, cssW) {
     canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
     return page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
   }).catch(() => {});
+};
+
+/* ---------- 글자 위치 (형광펜 맞추기용) ----------
+   페이지를 그릴 때 미리 받아 두고, 형광펜을 뗄 때는 바로 씀. 좌표는 페이지 너비 기준 0~1 */
+Y.pdfText = function (doc, idx) {
+  const C = doc._txt || (doc._txt = {});
+  if (C[idx]) return C[idx];
+  C[idx] = { boxes: null };
+  doc.pdf.getPage(idx + 1).then(async page => {
+    const vp = page.getViewport({ scale: 1 }), tc = await page.getTextContent(), out = [];
+    const mc = (Y._mc || (Y._mc = document.createElement('canvas').getContext('2d')));
+    tc.items.forEach(it => {
+      const s = it.str || '', t = it.transform;
+      if (!s.trim() || !it.width || Math.abs(t[1]) > 0.01 || Math.abs(t[2]) > 0.01) return;   // 기울어진 글자는 제외
+      const hh = it.height || Math.abs(t[3]), x = t[4], y = t[5] - hh * 0.22;               // 아래 꼬리(g, y)까지
+      const r = vp.convertToViewportRectangle([x, y, x + it.width, y + hh * 1.22]);
+      const bx = { x: Math.min(r[0], r[2]) / vp.width, y: Math.min(r[1], r[3]) / vp.width, w: Math.abs(r[2] - r[0]) / vp.width, h: Math.abs(r[3] - r[1]) / vp.width, n: s.length };
+      // 글자마다 실제 폭 비율로 경계 계산 (비례 글꼴 대응)
+      const st = tc.styles[it.fontName]; mc.font = '100px ' + ((st && st.fontFamily) || 'sans-serif');
+      const ws = [0]; let acc = 0;
+      for (const ch of s) { acc += mc.measureText(ch).width; ws.push(acc); }
+      bx.o = acc > 0 ? ws.map(v => bx.x + bx.w * v / acc) : null; bx.c = Array.from(s);
+      out.push(bx);
+    });
+    C[idx].boxes = out;
+  }).catch(() => { C[idx].boxes = []; });
+  return C[idx];
+};
+
+/* 자유롭게 그은 형광펜 → 지나간 글자 줄마다 반듯한 형광펜으로. 글자 위가 아니면 null */
+Y.snapHL = function (pg, st) {
+  const doc = pg.pane.doc, T = doc._txt && doc._txt[doc.pages.indexOf(pg)];
+  const B = T && T.boxes; if (!B || !B.length || st.p.length < 2) return null;
+  const hits = new Map(); let on = 0;
+  st.p.forEach(p => {
+    let hit = false;
+    B.forEach(b => {
+      const cw = b.w / b.n, py = b.h * 0.15;
+      if (p[0] >= b.x - cw * 0.5 && p[0] <= b.x + b.w + cw * 0.5 && p[1] >= b.y - py && p[1] <= b.y + b.h + py) {
+        hit = true; const r = hits.get(b) || [9, -9]; r[0] = Math.min(r[0], p[0]); r[1] = Math.max(r[1], p[0]); hits.set(b, r);
+      }
+    });
+    if (hit) on++;
+  });
+  if (on / st.p.length < 0.6 || !hits.size) return null;
+  // 같은 줄끼리 묶기
+  const lines = [];
+  [...hits.keys()].sort((a, b) => a.y - b.y).forEach(b => {
+    const cy = b.y + b.h / 2, L = lines.find(l => Math.abs(l.cy - cy) < Math.min(l.h, b.h) * 0.5);
+    if (L) L.items.push(b); else lines.push({ cy, h: b.h, items: [b] });
+  });
+  const out = [];
+  lines.forEach(L => {
+    let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
+    L.items.forEach(b => {
+      const r = hits.get(b), cw = b.w / b.n;
+      const a = Math.max(b.x, Math.min(r[0], b.x + b.w)), z = Math.max(b.x, Math.min(r[1], b.x + b.w));
+      let s, e;
+      if (b.o) {   // 글자 경계로: 시작은 글자 절반을 넘으면 그 글자부터, 끝도 절반을 넘으면 그 글자까지
+        const O = b.o; let i = 0, j = O.length - 1;
+        while (i < O.length - 2 && (O[i] + O[i + 1]) / 2 < a) i++;
+        while (j > 1 && (O[j - 1] + O[j]) / 2 > z) j--;
+        // 단어 단위로 넓힘 (글꼴 측정 오차로 단어가 반쯤 칠해지지 않게)
+        const sp = k => /\s/.test(b.c[k] || ' ');
+        if (i < j) { while (i > 0 && !sp(i - 1) && !sp(i)) i--; while (j < b.c.length && !sp(j) && !sp(j - 1)) j++; }
+        while (i < j && sp(i)) i++; while (j > i && sp(j - 1)) j--;
+        s = O[i]; e = O[j];
+      } else { s = b.x + Math.floor((a - b.x) / cw + 0.15) * cw; e = b.x + Math.ceil((z - b.x) / cw - 0.15) * cw; }
+      if (e - s < cw * 0.5) return;
+      x0 = Math.min(x0, s); x1 = Math.max(x1, e); y0 = Math.min(y0, b.y); y1 = Math.max(y1, b.y + b.h);
+    });
+    if (x1 <= x0) return;
+    const r3 = v => Math.round(v * 10000) / 10000, cy = r3((y0 + y1) / 2);
+    out.push({ t: 'hl', c: st.c, s: r3(y1 - y0), a: st.a, p: [[r3(x0), cy, 0.5], [r3(x1), cy, 0.5]] });
+  });
+  return out.length ? out : null;
 };
 
 /* ---------- 목차 ---------- */

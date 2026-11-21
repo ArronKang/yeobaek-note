@@ -116,7 +116,7 @@ Y.store = {
 Y.settings = Object.assign({
   finger: false, theme: 'light', penButton: 'eraser', doubleTap: 'undo', snap: true, palm: 'mid', linkPenOnly: false,
   tabLang: 'en', paper: 'white', trayCount: 5, haptic: 'mid',
-  autosave: 500, exportDir: 'files', trashDays: 30
+  autosave: 500, exportDir: 'files', trashDays: 30, hlSnap: true
 }, Y.store.get('yeobaek.v2.settings', {}));
 if (!Y.settings.v3) { Y.settings.v3 = 1; Y.settings.finger = false; Y.settings.theme = Y.settings.theme || 'light'; }
 Y.saveSettings = () => Y.store.set('yeobaek.v2.settings', Y.settings);

@@ -756,6 +756,12 @@ function onUp(e) {
         () => { add.forEach(s => { const i = pg.strokes.indexOf(s); if (i >= 0) pg.strokes.splice(i, 1); }); asc.forEach(it => pg.strokes.splice(Math.min(it.idx, pg.strokes.length), 0, it.st)); },
         () => { rem.forEach(it => { const i = pg.strokes.indexOf(it.st); if (i >= 0) pg.strokes.splice(i, 1); }); add.forEach(s => pg.strokes.push(s)); });
     }
+  } else if (st && st.t === 'hl' && P.doc.type === 'pdf' && Y.settings.hlSnap !== false && Y.snapHL && (c.rep = Y.snapHL(pg, st))) {
+    // 글자에 맞춘 형광펜으로 바꿈 (되돌리기 한 번에 전부)
+    const rep = c.rep, i = pg.strokes.indexOf(st);
+    pg.strokes.splice(i < 0 ? pg.strokes.length : i, i < 0 ? 0 : 1, ...rep); pg._snap = null;
+    redraw(pg); Y.haptic(6);
+    pushHist(P, pg, () => rep.forEach(s => { const k = pg.strokes.indexOf(s); if (k >= 0) pg.strokes.splice(k, 1); }), () => rep.forEach(s => pg.strokes.push(s)));
   } else if (st) {
     delete st._live; pg._snap = null;
     redraw(pg);

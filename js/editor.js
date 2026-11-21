@@ -542,6 +542,7 @@ Y.openSettings = function () {
     row('손가락으로 필기', toggle('finger', () => { Y.applyPaper(); renderTools(false); }), '끄면 손가락은 화면 이동·확대, 펜과 마우스만 필기해요'),
     row('S Pen 버튼 동작', segc('penButton', [['eraser', '지우개'], ['lasso', '올가미']]), '펜 옆 버튼을 누른 채로 쓸 때'),
     row('더블탭 동작', segc('doubleTap', [['undo', '실행취소'], ['eraser', '지우개']]), '앱 버전에서 적용돼요'),
+    row('글자에 맞춰 형광펜', toggle('hlSnap'), 'PDF 글자 위에 그으면 줄에 맞춰 반듯하게 칠해져요'),
     row('모양 보정', toggle('snap'), '선을 긋고 0.6초 멈추면 직선·원·사각형으로 바뀌어요'),
     row('손바닥 거부 강도', segc('palm', [['weak', '약'], ['mid', '중'], ['strong', '강']])),
     row('링크는 펜으로만 열기', toggle('linkPenOnly'), '켜면 손가락 탭은 링크를 열지 않아요'),
