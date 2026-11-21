@@ -596,3 +596,25 @@ html,body{touch-action:manipulation}
 .ptype.on .pname{filter:blur(0)}
 @media(max-width:900px){#scrim{-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}}
 @media(prefers-reduced-motion:reduce){.toast,.modal,.popover,#editor,#editor .pages,#chip,#saved,.qcard,.pname{filter:none!important}}
+
+/* ===== 문제지: PDF처럼 고정된 페이지 (560×792 기준으로 그리고 통째로 확대) ===== */
+.qlayer{--dp:1px;inset:auto;left:0;top:0;width:560px;height:792px;transform:scale(var(--qs,1));transform-origin:0 0}
+.qmeasure .qlayer{transform:none}
+.qlayer .qb{display:block}
+.qlayer .qhead{flex-direction:row}
+.qlayer .qchoices{grid-auto-flow:row}
+.qcol.fit{transform-origin:0 0}
+
+/* 꾹 누른 채로 밀어서 고르는 메뉴 */
+.qcard{display:flex;flex-direction:column}
+.qc-acts{order:-1;display:flex;gap:calc(6 * var(--dp));margin:0 0 calc(10 * var(--dp))}
+.qcard.up .qc-acts{order:99;margin:calc(10 * var(--dp)) 0 0}
+.qc-act{flex:1;display:flex;align-items:center;justify-content:center;gap:.35em;height:calc(34 * var(--dp));border-radius:999px;border:1px solid var(--paper-line);
+  font-size:.95em;font-weight:600;color:var(--ink);background:var(--paper);transition:background-color .18s var(--ease),color .18s var(--ease),transform .25s var(--spring),border-color .18s}
+.qc-act .ic{width:1.2em;height:1.2em}
+.qc-act.on{border-color:var(--ink)}
+.qc-act.o{color:#2f9e44}.qc-act.x{color:#e03131}
+.qc-act.hot{background:var(--ink);color:var(--paper);border-color:var(--ink);transform:scale(1.06)}
+.qc-act.o.hot{background:#2f9e44;border-color:#2f9e44}.qc-act.x.hot{background:#e03131;border-color:#e03131}
+.qc-hint{order:-1;font-size:.78em;color:var(--paper-label);margin:-.2em 0 .5em}
+.qcard.up .qc-hint{order:98;margin:.5em 0 -.2em}

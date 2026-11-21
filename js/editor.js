@@ -361,7 +361,7 @@ function buildSidebar() {
   const P = Y.active; if (!P || !P.doc || !E.sidebar) return;
   P.doc.pages.forEach((pg, i) => {
     const w = 116, hgt = Math.round(w * pg.ratio);
-    const tp = h('div', { class: 'tpaper paper tpl-' + (P.doc.type === 'note' ? pg.tpl : 'blank'), style: 'width:' + w + 'px;height:' + hgt + 'px;--dp:' + (w / 560) + 'px;--w:' + w + 'px' });
+    const tp = h('div', { class: 'tpaper paper tpl-' + (P.doc.type === 'note' ? pg.tpl : 'blank'), style: 'width:' + w + 'px;height:' + hgt + 'px;--dp:' + (w / 560) + 'px;--qs:' + (w / 560) + ';--w:' + w + 'px' });
     if (P.doc.type === 'note') { const html = Y.tplHTML(pg.tpl); if (html) tp.insertAdjacentHTML('beforeend', html); }
     let pc = null;
     if (P.doc.type === 'pdf') { pc = h('canvas', { class: 'pdfbg' }); tp.append(pc); Y.pdfThumb(P.doc, i, pc, w); }

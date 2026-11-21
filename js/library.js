@@ -10,7 +10,7 @@ const folderOf = id => Y.lib.folders.find(f => f.id === id);
 function descendants(id) { const out = [id]; Y.lib.folders.filter(f => f.parent === id).forEach(c => out.push(...descendants(c.id))); return out; }
 function viewTitle() {
   if (L.q) return '검색 결과';
-  if (L.view === 'all') return '모든 노트'; if (L.view === 'recent') return '최근';
+  if (L.view === 'all') return '노트'; if (L.view === 'quiz') return '문제지'; if (L.view === 'recent') return '최근';
   if (L.view === 'fav') return '즐겨찾기'; if (L.view === 'trash') return '휴지통';
   const f = folderOf(L.view.slice(2)); return f ? f.name : '모든 노트';
 }
@@ -18,6 +18,8 @@ function visible() {
   let a = Y.lib.notes.filter(n => !!n.trashed === (L.view === 'trash' && !L.q));
   if (L.q) a = a.filter(n => !n.trashed && n.title.toLowerCase().includes(L.q.toLowerCase()));
   else if (L.view === 'fav') a = a.filter(n => n.fav);
+  else if (L.view === 'all') a = a.filter(n => n.kind !== 'quiz');
+  else if (L.view === 'quiz') a = a.filter(n => n.kind === 'quiz');
   else if (L.view.startsWith('f:')) { const ids = descendants(L.view.slice(2)); a = a.filter(n => ids.includes(n.folder)); }
   const by = L.view === 'recent' && !L.q ? 'updated' : L.sort;
   a = a.slice().sort((x, y) => by === 'name' ? x.title.localeCompare(y.title, 'ko') : by === 'created' ? y.created - x.created : y.updated - x.updated);
@@ -44,7 +46,7 @@ function renderSide() {
     });
     return b;
   };
-  nav.append(item('all', 'notes', '모든 노트', count(() => true)), item('recent', 'clock', '최근'),
+  nav.append(item('all', 'notes', '노트', count(n => n.kind !== 'quiz')), item('quiz', 'quiz', '문제지', count(n => n.kind === 'quiz')), item('recent', 'clock', '최근'),
     item('fav', 'star', '즐겨찾기', count(n => n.fav)), item('trash', 'trash', '휴지통', Y.lib.notes.filter(n => n.trashed).length));
   side.append(nav);
   const fh = h('div', { class: 'fhead' }, h('span', { text: '폴더' }),
@@ -278,8 +280,11 @@ Y.noteDoc = function (n) {
   const pages = data && data.pages && data.pages.length ? data.pages.map(p => ({ ratio: p.ratio || Y.RATIO, tpl: p.tpl || 'lined', strokes: p.strokes || [], texts: p.texts || [] })) : [Y.makePage('lined')];
   return { id: n.id, type: 'note', title: n.title, pages };
 };
+const prepped = new WeakSet();
 Y.openNote = function (n, coverElm) {
   const rect = coverElm ? coverElm.getBoundingClientRect() : null;
+  if (n.kind === 'quiz' && !prepped.has(n)) { prepped.add(n); Y.prepQuiz(n).then(() => Y.openNote(n, coverElm)); return; }
+  prepped.delete(n);
   const doc = n.kind === 'quiz' ? Y.quizDoc(n) : Y.noteDoc(n);
   if (!doc) { Y.toast('문제지 데이터를 찾을 수 없어요'); return; }
   Y.enterEditor({ doc, rect, color: Y.coverColor(n.cover) });
@@ -292,8 +297,12 @@ $('#libfile').addEventListener('change', e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   const isQuiz = /\.ybq$/i.test(f.name) || /json/.test(f.type);
   const asQuiz = () => f.text().then(t => {
-    const spec = Y.parseQuiz(t), meta = Y.addQuiz(spec, { folder: (L.view.startsWith && L.view.startsWith('f:')) ? L.view.slice(2) : null });
-    renderSide(); renderBody(); Y.toast('문제지를 가져왔어요'); setTimeout(() => Y.openNote(meta), 150);
+    const spec = Y.parseQuiz(t);
+    Y.toast('문제지를 준비하는 중…', { ms: 4000 });
+    return Y.importQuiz(spec, { folder: (L.view.startsWith && L.view.startsWith('f:')) ? L.view.slice(2) : null }).then(meta => {
+      if (!L.view.startsWith('f:')) L.view = 'quiz';
+      renderSide(); renderBody(); Y.toast('문제지를 가져왔어요'); setTimeout(() => Y.openNote(meta), 150);
+    });
   });
   if (isQuiz) { asQuiz().catch(() => Y.toast('문제지 파일을 읽을 수 없어요. .ybq 형식인지 확인하세요', { ms: 4500 })); return; }
   const head = f.slice(0, 5).text ? f.slice(0, 5).text() : Promise.resolve('');

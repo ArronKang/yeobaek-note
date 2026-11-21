@@ -117,6 +117,7 @@ function setSizes(pg) {
   const P = pg.pane, W = P.W, H = Math.round(W * pg.ratio);
   pg.el.style.setProperty('--w', W + 'px');
   pg.el.style.setProperty('--dp', (W / 560) + 'px');
+  pg.el.style.setProperty('--qs', W / 560);
   pg.el.style.width = W + 'px'; pg.el.style.height = H + 'px';
   if (pg.active) {
     const rs = Math.min(Y.DPR, 3000 / W, 4096 / H);

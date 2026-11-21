@@ -81,6 +81,34 @@ function paginate(spec) {
   return pages;
 }
 
+/* ---------- 글꼴을 먼저 받아 두고 재기 (한글 글꼴은 글자 묶음별로 늦게 받아져서 높이가 달라짐) ---------- */
+function allText(spec) {
+  const t = [spec.title, spec.subject];
+  spec.problems.forEach(p => { t.push(p.q, p.text); (p.choices || []).forEach(c => t.push(c)); });
+  return Array.from(new Set(t.join('').replace(/\$[^$]*\$/g, '').replace(/\s/g, ''))).join('') + '0123456789①②③④⑤답이름문항점';
+}
+Y.quizFonts = function (spec) {
+  if (!document.fonts || !document.fonts.load) return Promise.resolve();
+  const txt = allText(spec), fam = '"Noto Sans KR"';
+  const jobs = ['400', '500', '600'].map(w => document.fonts.load(w + ' 16px ' + fam, txt).catch(() => {}));
+  jobs.push(document.fonts.load('600 16px "Barlow Condensed"', '0123456789/').catch(() => {}));
+  const all = Promise.all(jobs).then(() => document.fonts.ready);
+  return Promise.race([all, new Promise(r => setTimeout(r, 4000))]);
+};
+Y.importQuiz = (spec, opts) => Y.quizFonts(spec).then(() => Y.addQuiz(spec, opts));
+// 필기가 아직 없는 문제지는 글꼴을 받은 뒤 페이지를 다시 나눠요
+Y.prepQuiz = function (n) {
+  const spec = Y.store.get('yeobaek.v2.q.' + n.id, null); if (!spec) return Promise.resolve();
+  return Y.quizFonts(spec).then(() => {
+    const data = Y.store.get('yeobaek.v2.n.' + n.id, null) || {};
+    const old = data.pages || [];
+    if (old.some(p => (p.strokes && p.strokes.length) || (p.texts && p.texts.length))) return;
+    const pages = paginate(spec).map(p => ({ ratio: Y.RATIO, tpl: 'quiz', qi: p.qi, head: p.head, strokes: [], texts: [] }));
+    if (JSON.stringify(pages.map(p => p.qi)) === JSON.stringify(old.map(p => p.qi))) return;
+    Y.store.set('yeobaek.v2.n.' + n.id, { pages }); n.pageCount = pages.length; Y.saveLib();
+  }).catch(() => {});
+};
+
 /* ---------- 라이브러리에 추가 ---------- */
 Y.addQuiz = function (spec, opts) {
   opts = opts || {};
@@ -130,6 +158,7 @@ Y.quizLayer = function (doc, pg) {
   lay.dataset.doc = doc.id; lay.classList.toggle('focus', !!doc.qs.focus);
   pg.qi.forEach(i => paintBlock(lay, doc, i, false));
   if (pg.head) paintScore(lay, doc, false);
+  fitWhenReady(lay);
   lay.addEventListener('click', e => { if (performance.now() - (Y._lpAt || 0) < 500) return; onClick(e, doc); });
   // 보기(버튼) 위에서 꾹 누르기 → 정답 보기
   let lpT = null, lp0 = null;
@@ -142,6 +171,21 @@ Y.quizLayer = function (doc, pg) {
   ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => lay.addEventListener(t, () => { clearTimeout(lpT); lp0 = null; }));
   return lay;
 };
+// 안전장치: 내용이 페이지보다 길면 넘치지 않게 문항 묶음을 살짝 줄여서 한 장에 담아요
+function fit(lay) {
+  const col = lay.querySelector('.qcol'); if (!col) return;
+  col.style.transform = ''; col.style.width = ''; col.classList.remove('fit');
+  const room = col.clientHeight, need = col.scrollHeight;
+  if (!room || need <= room + 1) return;
+  const k = Math.max(0.6, room / need);
+  col.classList.add('fit'); col.style.transform = 'scale(' + k + ')'; col.style.width = (100 / k) + '%';
+}
+function fitWhenReady(lay) {
+  let n = 0;
+  const go = () => { if (!lay.isConnected) { if (n++ < 60) requestAnimationFrame(go); return; } fit(lay); };
+  requestAnimationFrame(go);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => lay.isConnected && fit(lay));
+}
 function blocks(doc, i) { return Y.$$('.qlayer[data-doc="' + doc.id + '"] .qb[data-qi="' + i + '"]'); }
 
 function markSVG(kind) {
@@ -192,10 +236,26 @@ function closeCard() {
   Y.$$('.qb.peek').forEach(b => b.classList.remove('peek'));
 }
 Y.closeQuizCard = closeCard;
-function openCard(qb, doc, i, at) {
+function setGrade(doc, i, v) {
+  const p = doc.quiz.problems[i];
+  if (v === 'clear') {
+    delete doc.qs.rev[i]; delete doc.qs.grade[i];
+    saveState(doc); refresh(doc, i, false); closeCard(); Y.haptic(10);
+    Y.toast(p.no + '번 답안을 지웠어요', { ms: 1400 }); return;
+  }
+  doc.qs.rev[i] = Object.assign(doc.qs.rev[i] || {}, { ans: 1 });
+  doc.qs.grade[i] = v;
+  saveState(doc); refresh(doc, i, true); closeCard(); Y.haptic(12);
+}
+function openCard(qb, doc, i, at, pt, press) {
   closeCard();
   const p = doc.quiz.problems[i], paper = qb.closest('.paper');
   const card = h('div', { class: 'qcard', role: 'dialog', 'aria-label': p.no + '번 정답과 풀이' });
+  // 맨 앞: 답안 제거 / 맞았어요 / 틀렸어요 — 누른 채로 밀어서 고르거나 눌러서 골라요
+  const g = doc.qs.grade[i];
+  const act = (v, icon, label) => h('button', { type: 'button', class: 'qc-act ' + v + (g === v ? ' on' : ''), 'data-v': v, html: Y.ic(icon) + '<span>' + label + '</span>', onclick: () => setGrade(doc, i, v) });
+  card.append(h('div', { class: 'qc-acts' }, act('clear', 'reset', '답안 제거'), act('o', 'check', '맞았어요'), act('x', 'close', '틀렸어요')));
+  if (press) card.append(h('div', { class: 'qc-hint', text: '누른 채로 밀어서 고르고 떼세요' }));
   card.append(h('div', { class: 'qc-top' }, h('span', { class: 'qc-k', text: p.no + '번 정답' }),
     h('button', { type: 'button', class: 'qc-x', 'aria-label': '닫기', html: Y.ic('close'), onclick: closeCard })));
   const big = p.type === 'choice' ? (CIRC[+p.answer - 1] || p.answer) : p.answer;
@@ -204,23 +264,21 @@ function openCard(qb, doc, i, at) {
     const sel = doc.qs.sel[i];
     card.append(h('div', { class: 'qc-res ' + (sel ? (isRight(p, sel) ? 'o' : 'x') : ''), text: sel ? (isRight(p, sel) ? '맞았어요' : '내 답 ' + CIRC[sel - 1] + ' · 틀렸어요') : '보기를 고르지 않았어요' }));
   } else {
-    const g = doc.qs.grade[i];
-    const og = v => h('button', { type: 'button', class: 'qc-g' + (g === v ? ' on' : ''), text: v === 'o' ? '맞았어요' : '틀렸어요', onclick: () => {
-      if (doc.qs.grade[i] === v) delete doc.qs.grade[i]; else doc.qs.grade[i] = v;
-      saveState(doc); refresh(doc, i, true); closeCard(); Y.haptic(10);
-    } });
-    card.append(h('div', { class: 'qc-self' }, h('span', { text: '내 답과 비교해 직접 채점하세요' }), h('div', { class: 'qc-gs' }, og('o'), og('x'))));
+    card.append(h('div', { class: 'qc-res', text: '내 답과 비교해서 맞았어요 / 틀렸어요를 고르세요' }));
   }
   if (p.solution) card.append(h('div', { class: 'qc-solh', text: '풀이' }), h('div', { class: 'qc-sol', html: tex(p.solution) }));
   paper.append(card);
-  // 위치: 누른 부분 바로 아래, 공간이 없으면 위
+  // 위치: 누른 손끝 바로 아래(메뉴가 손끝 가까이), 공간이 없으면 위로 뒤집어서
   const pr = paper.getBoundingClientRect(), dp = pr.width / PW, ch = card.offsetHeight;
-  const below = at.bottom - pr.top + 8 * dp;
-  const up = below + ch > pr.height - 12 * dp && at.top - pr.top - ch - 8 * dp > 8 * dp;
-  card.style.top = Math.max(8 * dp, up ? at.top - pr.top - ch - 8 * dp : Math.min(below, pr.height - ch - 12 * dp)) + 'px';
+  const py = pt ? pt.y : at.bottom;
+  const below = py - pr.top + 22 * dp;
+  const up = below + ch > pr.height - 12 * dp && py - pr.top - ch - 22 * dp > 8 * dp;
+  card.classList.toggle('up', up);
+  card.style.top = Math.max(8 * dp, up ? py - pr.top - ch - 22 * dp : Math.min(below, pr.height - ch - 12 * dp)) + 'px';
   card.style.transformOrigin = '50% ' + (up ? '100%' : '0');
   requestAnimationFrame(() => card.classList.add('in'));
   qb.classList.add('peek');
+  if (press) drag = { card, hot: null };
   if (!doc.qs.rev[i]) doc.qs.rev[i] = {};
   if (!doc.qs.rev[i].ans) {
     doc.qs.rev[i].ans = 1;
@@ -228,6 +286,22 @@ function openCard(qb, doc, i, at) {
     saveState(doc); refresh(doc, i, true);
   }
 }
+
+/* 누른 채로 밀어서 고르기 */
+let drag = null;
+window.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (!drag.card.isConnected) { drag = null; return; }
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  let a = el && el.closest && el.closest('.qc-act'); if (a && !drag.card.contains(a)) a = null;
+  if (a !== drag.hot) { if (drag.hot) drag.hot.classList.remove('hot'); drag.hot = a; if (a) { a.classList.add('hot'); Y.haptic(6); } }
+}, { capture: true, passive: true });
+window.addEventListener('pointerup', () => {
+  if (!drag) return;
+  const a = drag.hot; drag = null;
+  if (a) { a.classList.remove('hot'); a.click(); }
+}, true);
+window.addEventListener('pointercancel', () => { if (drag && drag.hot) drag.hot.classList.remove('hot'); drag = null; }, true);
 
 /* 꾹 누르기: 엔진이 펜/손가락을 한자리에 0.45초 머물면 호출 */
 Y.quizLongPress = function (pg, x, y) {
@@ -240,7 +314,7 @@ Y.quizLongPress = function (pg, x, y) {
     if (!zone) continue;
     const ring = h('div', { class: 'qripple', style: 'left:' + (x - pg.paper.getBoundingClientRect().left) + 'px;top:' + (y - pg.paper.getBoundingClientRect().top) + 'px' });
     pg.paper.append(ring); setTimeout(() => ring.remove(), 600);
-    openCard(qb, doc, i, zone);
+    openCard(qb, doc, i, zone, { x, y }, true);
     return true;
   }
   return false;
