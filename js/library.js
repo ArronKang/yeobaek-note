@@ -95,7 +95,7 @@ function folderMenu(anchor, f) {
     it('page', '이름 바꾸기', async () => { const n = await prompt({ title: '폴더 이름', value: f.name, ok: '바꾸기' }); if (n) { f.name = n; Y.saveLib(); renderSide(); renderBody(); } }),
     it('plus', '하위 폴더 추가', () => addFolder(f.id)),
     it('trash', '폴더 삭제', async () => {
-      const ok = await Y.confirm({ title: '‘' + f.name + '’ 폴더를 삭제할까요?', text: '안에 있는 노트는 폴더 없이 남아요.', ok: '폴더 삭제', danger: true });
+      const ok = await Y.confirm({ title: '‘' + f.name + '’ 폴더를 삭제할까요?', ok: '폴더 삭제', danger: true });
       if (!ok) return;
       const ids = descendants(f.id);
       Y.lib.notes.forEach(n => { if (ids.includes(n.folder)) n.folder = null; });
@@ -130,7 +130,7 @@ function renderBody() {
     act.append(h('span', { class: 'cap sc', text: L.sel.size + '개 선택됨' }));
     if (trash) {
       act.append(Y.btn('restore', '복원', () => { L.sel.forEach(id => { const n = Y.lib.notes.find(x => x.id === id); if (n) { n.trashed = false; delete n.trashedAt; } }); Y.saveLib(); exitSel(); }, { cls: 'sbtn' }),
-        Y.btn('trash', '영구 삭제', async () => { if (await Y.confirm({ title: L.sel.size + '개 노트를 영구 삭제할까요?', text: '이 작업은 되돌릴 수 없어요.', ok: '영구 삭제', danger: true })) { L.sel.forEach(id => ['n', 'q', 'qs'].forEach(k => Y.store.del('yeobaek.v2.' + k + '.' + id))); Y.lib.notes = Y.lib.notes.filter(n => !L.sel.has(n.id)); Y.saveLib(); exitSel(); } }, { cls: 'sbtn warn' }));
+        Y.btn('trash', '영구 삭제', async () => { if (await Y.confirm({ title: L.sel.size + '개 노트를 영구 삭제할까요?', ok: '영구 삭제', danger: true })) { L.sel.forEach(id => ['n', 'q', 'qs'].forEach(k => Y.store.del('yeobaek.v2.' + k + '.' + id))); Y.lib.notes = Y.lib.notes.filter(n => !L.sel.has(n.id)); Y.saveLib(); exitSel(); } }, { cls: 'sbtn warn' }));
     } else {
       const mv = Y.btn('move', '이동', () => movePop(mv), { cls: 'sbtn' });
       act.append(Y.btn('star', '즐겨찾기', () => { const all = Array.from(L.sel).every(id => (Y.lib.notes.find(n => n.id === id) || {}).fav); L.sel.forEach(id => { const n = Y.lib.notes.find(x => x.id === id); if (n) n.fav = !all; }); Y.saveLib(); exitSel(); }, { cls: 'sbtn' }), mv,
@@ -138,12 +138,11 @@ function renderBody() {
     }
     act.append(Y.btn('close', '취소', exitSel, { cls: 'sbtn' }));
   } else {
-    const seg = h('div', { class: 'seg icons', role: 'group', 'aria-label': '보기 전환' },
-      h('button', { type: 'button', class: L.mode === 'cover' ? 'on' : '', 'aria-label': '커버로 보기', html: Y.ic('cover'), onclick: () => { L.mode = 'cover'; Y.store.set('yeobaek.v2.libmode', L.mode); renderBody(); } }),
-      h('button', { type: 'button', class: L.mode === 'list' ? 'on' : '', 'aria-label': '목록으로 보기', html: Y.ic('list'), onclick: () => { L.mode = 'list'; Y.store.set('yeobaek.v2.libmode', L.mode); renderBody(); } }));
-    act.append(seg);
+    // iPadOS 도구 막대처럼: 글자 없는 아이콘 버튼
+    const ib = (icon, label, fn, o) => { const x = h('button', { type: 'button', class: 'ibtn' + (o && o.on ? ' on' : ''), 'aria-label': label, html: Y.ic(icon), onclick: fn }); return x; };
+    act.append(ib(L.mode === 'cover' ? 'list' : 'cover', L.mode === 'cover' ? '목록으로 보기' : '커버로 보기', () => { L.mode = L.mode === 'cover' ? 'list' : 'cover'; Y.store.set('yeobaek.v2.libmode', L.mode); renderBody(); }));
     if (L.view !== 'recent' && !trash) {
-      const chip = h('button', { type: 'button', class: 'chip', html: Y.ic('sort') + '<span>' + SORTS.find(s => s[0] === L.sort)[1] + '</span>' });
+      const chip = h('button', { type: 'button', class: 'ibtn', 'aria-label': '정렬', html: Y.ic('sort') });
       chip.addEventListener('click', () => {
         const list = h('div', { class: 'plist' });
         SORTS.forEach(s => list.append(h('button', { type: 'button', class: 'pitem' + (L.sort === s[0] ? ' on' : ''), text: s[1], onclick: () => { L.sort = s[0]; Y.closePopover(); renderBody(); } })));
@@ -153,8 +152,8 @@ function renderBody() {
     }
     if (trash) { if (notes.length) act.append(Y.btn('trash', '휴지통 비우기', emptyTrash, { cls: 'sbtn warn' })); }
     else {
-      act.append(Y.btn('pdf', '가져오기', () => $('#libfile').click(), { cls: 'sbtn' }));
-      act.append(h('button', { type: 'button', class: 'btn primary', text: '새 노트', onclick: newNoteModal }));
+      act.append(ib('importf', '가져오기', () => $('#libfile').click()));
+      act.append(ib('compose', '새 노트', newNoteModal));
     }
   }
   main.append(h('header', { class: 'lhead' }, title, act));
@@ -222,7 +221,7 @@ async function trashSel() {
   Y.toast('휴지통으로 옮겼어요', { action: '되돌리기', onAction: () => { ids.forEach(id => { const n = Y.lib.notes.find(x => x.id === id); if (n) { n.trashed = false; delete n.trashedAt; } }); Y.saveLib(); renderSide(); renderBody(); }, ms: 4500 });
 }
 async function emptyTrash() {
-  const ok = await Y.confirm({ title: '휴지통을 비울까요?', text: '비운 노트는 되돌릴 수 없어요.', ok: '휴지통 비우기', danger: true });
+  const ok = await Y.confirm({ title: '휴지통을 비울까요?', ok: '휴지통 비우기', danger: true });
   if (!ok) return;
   Y.lib.notes.filter(n => n.trashed).forEach(n => ['n', 'q', 'qs'].forEach(k => Y.store.del('yeobaek.v2.' + k + '.' + n.id)));
   Y.lib.notes = Y.lib.notes.filter(n => !n.trashed); Y.saveLib(); renderSide(); renderBody();
@@ -264,11 +263,11 @@ function newNoteModal() {
     setTimeout(() => Y.openNote(meta, el), 120);
   };
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  // 시트 머리: 취소 | 새 노트 | 만들기
   m = Y.modal(h('div', { class: 'newnote' },
-    h('h3', { text: '새 노트' }),
+    h('div', { class: 'shead' }, h('button', { type: 'button', class: 'tbtn', text: '취소', onclick: () => m.close() }), h('h3', { text: '새 노트' }), h('button', { type: 'button', class: 'tbtn strong', text: '만들기', onclick: go })),
     h('div', { class: 'nnrow' }, pv, h('div', { class: 'nnf' }, h('label', { class: 'flabel', text: '제목' }), inp, h('label', { class: 'flabel', text: '커버 색' }), covers)),
-    h('label', { class: 'flabel', text: '페이지 양식' }), tpls,
-    h('div', { class: 'dlg-act' }, h('button', { class: 'btn ghost', text: '취소', onclick: () => m.close() }), h('button', { class: 'btn primary', text: '만들기', onclick: go }))), { cls: 'wide' });
+    h('label', { class: 'flabel', text: '양식' }), tpls), { cls: 'wide' });
 }
 
 /* ---------- 열기 ---------- */
@@ -283,7 +282,7 @@ Y.openNote = function (n, coverElm) {
   if (n.kind === 'quiz' && !prepped.has(n)) { prepped.add(n); Y.prepQuiz(n).then(() => Y.openNote(n, coverElm)); return; }
   prepped.delete(n);
   const doc = n.kind === 'quiz' ? Y.quizDoc(n) : Y.noteDoc(n);
-  if (!doc) { Y.toast('문제지 데이터를 찾을 수 없어요'); return; }
+  if (!doc) { Y.toast('열 수 없어요'); return; }
   Y.enterEditor({ doc, rect, color: Y.coverColor(n.cover) });
 
 };
@@ -322,7 +321,7 @@ $('#libfile').addEventListener('change', e => {
     
     return Y.importQuiz(spec, { folder: (L.view.startsWith && L.view.startsWith('f:')) ? L.view.slice(2) : null }).then(meta => {
       if (!L.view.startsWith('f:')) L.view = 'quiz';
-      renderSide(); renderBody(); Y.toast('문제지를 가져왔어요'); setTimeout(() => Y.openNote(meta), 150);
+      renderSide(); renderBody(); setTimeout(() => Y.openNote(meta), 150);
     });
   });
   if (isQuiz) { asQuiz().catch(() => Y.toast('열 수 없는 파일이에요')); return; }
@@ -333,10 +332,10 @@ $('#libfile').addEventListener('change', e => {
     Y.openPdfFile(f).then(async doc => {
       Y.$('.toast') && Y.$('.toast').remove();
       const meta = await fromPack(doc);
-      if (meta) { renderSide(); renderBody(); Y.toast(meta.kind === 'quiz' ? '여백 문제지로 열었어요' : '여백 노트로 열었어요'); setTimeout(() => Y.openNote(meta), 150); return; }
+      if (meta) { renderSide(); renderBody(); setTimeout(() => Y.openNote(meta), 150); return; }
       Y.enterEditor({ doc });
     })
-      .catch(err => Y.toast(err && err.message === 'engine' ? 'PDF 엔진을 불러오지 못했어요. 인터넷 연결을 확인하세요' : '이 파일은 열 수 없어요. PDF나 .ybq 문제지를 선택하세요', { ms: 5000 }));
+      .catch(err => Y.toast('열 수 없는 파일이에요'));
   });
 });
 

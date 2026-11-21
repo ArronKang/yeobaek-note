@@ -34,6 +34,6 @@ Y.tplHTML = function (id) {
 
 Y.linkAction = function (name) {
   if (name === 'back') Y.closeEditor();
-  else Y.toast('이 링크는 시안에서 이동하지 않아요');
+  else ;
 };
 })(window.Y);

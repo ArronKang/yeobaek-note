@@ -161,7 +161,7 @@ async function deliver(file) {
   const a = h('a', { href: url, download: file.name }); document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
   Y.haptic(10);
-  if (canShare) Y.toast('PDF로 저장했어요', { action: '공유', onAction: () => navigator.share({ files: [file], title: file.name }).catch(() => {}) });
-  else Y.toast('PDF로 저장했어요');
+  if (canShare) Y.toast('저장했어요', { action: '공유', onAction: () => navigator.share({ files: [file], title: file.name }).catch(() => {}) });
+  else Y.toast('저장했어요');
 }
 })(window.Y);

@@ -251,7 +251,7 @@ function setGrade(doc, i, v) {
   if (v === 'clear') {
     delete doc.qs.rev[i]; delete doc.qs.grade[i];
     saveState(doc); refresh(doc, i, false); closeCard(); Y.haptic(10);
-    Y.toast(p.no + '번 답안을 지웠어요', { ms: 1400 }); return;
+    return;
   }
   doc.qs.rev[i] = Object.assign(doc.qs.rev[i] || {}, { ans: 1 });
   doc.qs.grade[i] = v;
@@ -408,7 +408,7 @@ Y.gradeAll = function (doc) {
   saveState(doc); doc.quiz.problems.forEach((p, i) => refresh(doc, i, true));
   const sc = score(doc);
   if (!n && !sc.graded) Y.toast('고른 보기가 없어요');
-  else Y.toast(sc.right + ' / ' + sc.total + (''), { ms: 3500 });
+  else Y.toast(sc.right + ' / ' + sc.total, { ms: 2200 });
   Y.haptic(15);
 };
 /* 오답 문제지: 틀렸거나 별표한 문제만 모아 새 문제지로. 딸린 지문도 함께, 원래 번호는 머리에 작게 */
@@ -430,7 +430,7 @@ Y.retryQuiz = function (doc) {
   return Y.importQuiz(spec, { cover: 'rose' }).then(meta => { Y.haptic(10); return meta; });
 };
 Y.resetQuiz = function (doc) {
-  Y.confirm({ title: '문제지를 처음 상태로 돌릴까요?', text: '고른 보기, 채점, 펼친 정답이 지워져요. 필기는 그대로예요.', ok: '초기화', danger: true }).then(ok => {
+  Y.confirm({ title: '문제지를 처음 상태로 돌릴까요?', ok: '초기화', danger: true }).then(ok => {
     if (!ok) return;
     doc.qs = { sel: {}, rev: {}, grade: {}, star: doc.qs.star || {}, focus: false }; closeCard(); saveState(doc); Y.quizFocus(doc, false);
     doc.quiz.problems.forEach((p, i) => refresh(doc, i, false));

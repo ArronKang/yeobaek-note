@@ -43,6 +43,8 @@ const ICON = {
   eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   retry: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v3.2h3.2"/><path d="M10 10l4 4M14 10l-4 4"/>',
+  compose: '<path d="M11 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V13"/><path d="M17.6 3.6a1.9 1.9 0 0 1 2.7 2.7L12.5 14l-3.6.9.9-3.6z"/>',
+  importf: '<path d="M12 4v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19.5h14"/>',
   focus: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
   quiz: '<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M9 8.5h6M9 12h6M9 15.5h3"/><path d="M14.5 15.5l1.3 1.3 2.4-2.6"/>',
   reset: '<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/>',
@@ -113,7 +115,7 @@ Y.store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) {
     try { localStorage.setItem(k, JSON.stringify(v)); return true; }
-    catch (e) { Y.toast('저장 공간이 부족해요. 휴지통을 비우거나 오래된 노트를 내보내세요'); return false; }
+    catch (e) { Y.toast('저장 공간이 부족해요'); return false; }
   },
   del(k) { try { localStorage.removeItem(k); } catch (e) {} }
 };

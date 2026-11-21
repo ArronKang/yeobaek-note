@@ -113,7 +113,7 @@ function renderTools0(anim) {
       row.append(B('sidebar', '페이지 사이드바', toggleSidebar, { pressed: E.sidebar }));
       const tb = B('toc', '목차', () => tocPop(tb, P)); row.append(tb);
       const has = P.bookmarks.has(P.pageIdx);
-      row.append(B('bookmark', '북마크', () => { if (P.bookmarks.has(P.pageIdx)) P.bookmarks.delete(P.pageIdx); else P.bookmarks.add(P.pageIdx); Y.toast(P.bookmarks.has(P.pageIdx) ? '북마크에 추가했어요' : '북마크를 해제했어요'); renderTools(false); }, { pressed: has }));
+      row.append(B('bookmark', '북마크', () => { if (P.bookmarks.has(P.pageIdx)) P.bookmarks.delete(P.pageIdx); else P.bookmarks.add(P.pageIdx); renderTools(false); }, { pressed: has }));
       row.append(sep(), searchBox(P));
     }
   } else if (E.tab === 'insert') {
@@ -166,10 +166,10 @@ function tplPop(anchor, P) {
   Y.TEMPLATES.forEach(t => {
     list.append(h('button', { type: 'button', class: 'pitem' + (pg.tpl === t[0] ? ' on' : ''), text: t[1], onclick: () => { Y.setTemplate(pg, t[0]); Y.closePopover(); buildSidebar(); } }));
   });
-  Y.popover(anchor, h('div', {}, h('div', { class: 'ptitle', text: '이 페이지의 템플릿' }), list), { width: 220, align: 'left' });
+  Y.popover(anchor, h('div', {}, h('div', { class: 'ptitle', text: '템플릿' }), list), { width: 220, align: 'left' });
 }
 function tocPop(anchor, P) {
-  const box = h('div', { class: 'plist toc' }, h('div', { class: 'pempty', text: '불러오는 중…' }));
+  const box = h('div', { class: 'plist toc' }, h('div', { class: 'pempty', text: '' }));
   Y.popover(anchor, h('div', {}, h('div', { class: 'ptitle', text: '목차' }), box), { width: 300, align: 'left' });
   Y.pdfOutline(P.doc.pdf).then(items => {
     box.innerHTML = '';
@@ -179,10 +179,10 @@ function tocPop(anchor, P) {
       bms.forEach(i => box.append(h('button', { type: 'button', class: 'pitem', text: (i + 1) + '쪽', onclick: () => { P.doc.pages[i].el.scrollIntoView({ block: 'start' }); Y.closePopover(); } })));
       box.append(h('div', { class: 'psub', text: '목차' }));
     }
-    if (!items.length) box.append(h('div', { class: 'pempty', text: '이 PDF에는 목차가 없어요' }));
+    if (!items.length) box.append(h('div', { class: 'pempty', text: '목차 없음' }));
     items.forEach(it => box.append(h('button', { type: 'button', class: 'pitem', style: 'padding-left:' + (12 + it.level * 14) + 'px', text: it.title, disabled: it.page == null,
       onclick: () => { P.doc.pages[it.page].el.scrollIntoView({ block: 'start' }); Y.closePopover(); } })));
-  }).catch(() => { box.innerHTML = ''; box.append(h('div', { class: 'pempty', text: '목차를 읽지 못했어요' })); });
+  }).catch(() => { box.innerHTML = ''; box.append(h('div', { class: 'pempty', text: '목차 없음' })); });
 }
 function paperPop(anchor) {
   const list = h('div', { class: 'plist' });
@@ -198,7 +198,7 @@ function redrawAllPages() { Y.panes.forEach(P => P.doc.pages.forEach(pg => { Y.r
 function recolorPop(anchor, P) {
   const row = h('div', { class: 'swatches' });
   Y.PEN_COLORS.forEach(c => row.append(h('button', { type: 'button', class: 'dot', style: '--c:' + c, 'aria-label': '색 ' + c, onclick: () => { Y.recolorSel(P, c); Y.closePopover(); } })));
-  Y.popover(anchor, h('div', {}, h('div', { class: 'ptitle', text: '선택한 필기의 색' }), row), { width: 250 });
+  Y.popover(anchor, h('div', {}, h('div', { class: 'ptitle', text: '색' }), row), { width: 250 });
 }
 
 /* =============== 펜 트레이 =============== */
@@ -390,7 +390,7 @@ function pageMenu(anchor, P, i) {
     item('template', '템플릿 변경', () => tplPopAt(anchor, P, i)),
     item('up', '위로 이동', () => { const t = pages[i]; pages[i] = pages[i - 1]; pages[i - 1] = t; after(); }, i === 0),
     item('down', '아래로 이동', () => { const t = pages[i]; pages[i] = pages[i + 1]; pages[i + 1] = t; after(); }, i === pages.length - 1),
-    item('trash', '삭제', () => { if (pages.length < 2) { Y.toast('마지막 페이지는 삭제할 수 없어요'); return; } pages.splice(i, 1); after(); }));
+    item('trash', '삭제', () => { if (pages.length < 2) { Y.haptic(20); return; } pages.splice(i, 1); after(); }));
   Y.popover(anchor, list, { width: 200, align: 'left', top: anchor.getBoundingClientRect().top + 20 });
 }
 function tplPopAt(anchor, P, i) {
@@ -418,7 +418,7 @@ Y.onPageChange = function (P, n, changed) {
   if (E.tab === 'home' && P.doc.type === 'pdf') { const a = document.activeElement; if (!(a && a.tagName === 'INPUT')) renderTools(false); }
 };
 Y.flashSaved = function () {
-  const s = $('#saved'); s.classList.add('in'); clearTimeout(Y._st); Y._st = setTimeout(() => s.classList.remove('in'), 1200);
+  // 저장은 조용히 (표시 없음)
 };
 Y.onActive = function (P) {
   $('#title').value = P.doc ? P.doc.title : '';
@@ -461,7 +461,7 @@ function toggleSplit() {
     const inp = h('input', { type: 'file', accept: 'application/pdf' });
     inp.addEventListener('change', () => {
       const f = inp.files[0]; if (!f) return;
-      Y.openPdfFile(f).then(pdoc => startSplit(pdoc, P0, true)).catch(() => Y.toast('PDF를 열 수 없어요. 파일이 손상되었거나 암호가 걸려 있어요. 다른 파일을 선택하세요'));
+      Y.openPdfFile(f).then(pdoc => startSplit(pdoc, P0, true)).catch(() => Y.toast('열 수 없는 파일이에요'));
     });
     inp.click();
   } else {
