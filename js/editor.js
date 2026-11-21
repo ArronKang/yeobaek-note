@@ -103,6 +103,7 @@ function renderTools0(anim) {
         B('check', '전체 채점', () => Y.gradeAll(d)));
       const ab = B('answer', '정답표', () => Y.answerSheet(ab, d)); row.append(ab);
       row.append(B('focus', '틀린 문제만 보기', () => { Y.quizFocus(d); renderTools(false); }, { pressed: !!d.qs.focus }));
+      row.append(B('retry', '틀린 문제로 새 문제지', () => { const p = Y.retryQuiz(d); if (p) p.then(meta => { Y.closeEditor(); setTimeout(() => Y.openNote(meta), 250); }); }));
       row.append(B('reset', '처음 상태로', () => Y.resetQuiz(d)));
     } else if (d.type === 'note') {
       row.append(B('pageplus', '새 페이지', () => Y.addPage(P)));

@@ -31,7 +31,8 @@ Y.parseQuiz = function (text) {
     id: String(p.id || i + 1), type: p.type === 'short' ? 'short' : 'choice',
     q: p.q || '', choices: Array.isArray(p.choices) ? p.choices.slice(0, 8) : [],
     answer: p.answer, solution: p.solution || '', points: p.points || 0,
-    space: Math.max(30, Math.min(500, +p.space || (p.type === 'short' ? 130 : 70)))
+    space: Math.max(30, Math.min(500, +p.space || (p.type === 'short' ? 130 : 70))),
+    orig: +p.orig || 0
   }));
   j.title = j.title || '문제지'; j.subject = j.subject || '';
   return j;
@@ -51,7 +52,7 @@ function blockHTML(spec, idx, lv) {
   if (p.type === 'passage') return '<div class="qb qpass" data-qi="' + idx + '">' + (p.q ? '<div class="qp-h">' + tex(p.q) + '</div>' : '') + '<div class="qp-t">' + tex(p.text) + '</div></div>';
   let s = '<div class="qb" data-qi="' + idx + '">' +
     '<div class="qhead"><button type="button" class="qno" aria-label="' + p.no + '번 다시 볼 문제 표시">' + p.no + '<svg class="qmark" viewBox="0 0 40 40" aria-hidden="true"></svg><span class="qstar">' + Y.ic('star') + '</span></button>' +
-    '<div class="qtext">' + tex(p.q) + (p.points ? ' <span class="qpts">[' + p.points + '점]</span>' : '') + '</div></div>';
+    '<div class="qtext">' + tex(p.q) + (p.points ? ' <span class="qpts">[' + p.points + '점]</span>' : '') + (p.orig ? ' <span class="qpts">(' + p.orig + '번)</span>' : '') + '</div></div>';
   if (p.type === 'choice' && p.choices.length) {
     s += '<div class="qchoices c' + choiceCols(p) + '">' + p.choices.map((c, i) =>
       '<button type="button" class="qch" data-i="' + (i + 1) + '" aria-label="' + (i + 1) + '번 보기"><span class="qcn">' + CIRC[i] + '</span><span class="qct">' + tex(c) + '</span></button>').join('') + '</div>';
@@ -409,6 +410,24 @@ Y.gradeAll = function (doc) {
   if (!n && !sc.graded) Y.toast('고른 보기가 없어요');
   else Y.toast(sc.right + ' / ' + sc.total + (''), { ms: 3500 });
   Y.haptic(15);
+};
+/* 오답 문제지: 틀렸거나 별표한 문제만 모아 새 문제지로. 딸린 지문도 함께, 원래 번호는 머리에 작게 */
+Y.retryQuiz = function (doc) {
+  const ps = doc.quiz.problems, keep = new Set();
+  let passage = -1;
+  ps.forEach((p, i) => {
+    if (p.type === 'passage') { passage = i; return; }
+    if (doc.qs.grade[i] === 'x' || (doc.qs.star && doc.qs.star[i])) { keep.add(i); if (passage >= 0) keep.add(passage); }
+  });
+  if (![...keep].some(i => ps[i].type !== 'passage')) { Y.toast('틀린 문제가 없어요'); return null; }
+  const strip = ({ no, id, ...rest }) => rest;
+  const problems = [...keep].sort((a, b) => a - b).map(i => {
+    const p = strip(ps[i]);
+    if (p.type !== 'passage') p.orig = ps[i].no;
+    return p;
+  });
+  const spec = Y.parseQuiz(JSON.stringify({ ybq: 1, title: Y.clean(doc.quiz.title) + ' 오답', subject: Y.clean(doc.quiz.subject), problems }));
+  return Y.importQuiz(spec, { cover: 'rose' }).then(meta => { Y.haptic(10); return meta; });
 };
 Y.resetQuiz = function (doc) {
   Y.confirm({ title: '문제지를 처음 상태로 돌릴까요?', text: '고른 보기, 채점, 펼친 정답이 지워져요. 필기는 그대로예요.', ok: '초기화', danger: true }).then(ok => {
