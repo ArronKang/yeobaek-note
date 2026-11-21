@@ -238,7 +238,7 @@ function movePop(anchor) {
 /* ---------- 새 노트 ---------- */
 function newNoteModal() {
   const st = { title: '새 노트', cover: Y.COVERS[0].id, tpl: 'lined' };
-  const inp = h('input', { type: 'text', class: 'tinput', value: st.title, maxlength: 40, 'aria-label': '노트 제목' });
+  const inp = h('input', { type: 'text', class: 'tinput ttl', value: '', placeholder: '새 노트', maxlength: 40, 'aria-label': '노트 제목' });
   const covers = h('div', { class: 'swrow', role: 'radiogroup', 'aria-label': '커버 색' });
   const tpls = h('div', { class: 'tplrow', role: 'radiogroup', 'aria-label': '페이지 양식' });
   const paint = () => {
@@ -263,11 +263,11 @@ function newNoteModal() {
     setTimeout(() => Y.openNote(meta, el), 120);
   };
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
-  // 시트 머리: 취소 | 새 노트 | 만들기
+  // 제목은 큰 글씨로 바로 쓰는 자리, 동작은 아래 오른쪽
   m = Y.modal(h('div', { class: 'newnote' },
-    h('div', { class: 'shead' }, h('button', { type: 'button', class: 'tbtn', text: '취소', onclick: () => m.close() }), h('h3', { text: '새 노트' }), h('button', { type: 'button', class: 'tbtn strong', text: '만들기', onclick: go })),
-    h('div', { class: 'nnrow' }, pv, h('div', { class: 'nnf' }, h('label', { class: 'flabel', text: '제목' }), inp, h('label', { class: 'flabel', text: '커버 색' }), covers)),
-    h('label', { class: 'flabel', text: '양식' }), tpls), { cls: 'wide' });
+    h('div', { class: 'nnrow' }, pv, h('div', { class: 'nnf' }, inp, h('label', { class: 'flabel', text: '표지' }), covers)),
+    h('label', { class: 'flabel', text: '양식' }), tpls,
+    h('div', { class: 'dlg-act' }, h('button', { type: 'button', class: 'btn ghost', text: '취소', onclick: () => m.close() }), h('button', { type: 'button', class: 'btn primary', text: '만들기', onclick: go }))), { cls: 'wide' });
 }
 
 /* ---------- 열기 ---------- */

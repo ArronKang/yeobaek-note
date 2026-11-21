@@ -891,3 +891,120 @@ html[data-theme="dark"] .switch[aria-checked="true"]{background:var(--g4)}
 .qimg{display:block;max-width:100%;object-fit:contain}
 .qpass .qimg{margin:calc(8 * var(--dp)) auto 0}
 html[data-paper="dark"] .qimg{filter:invert(.88) hue-rotate(180deg)}
+
+/* =====================================================================
+   여백 디자인 언어 (애플의 철학을 따르되, 흉내는 내지 않음)
+   1. 여백이 주인공: 표면은 최소, 간격은 넉넉하게 (8의 배수)
+   2. 글자로 위계: 상자·배경 대신 굵기와 농도. 제목 600, 본문 400
+   3. 선택은 진한 글자 + 작은 점 하나
+   4. 모서리는 8 / 14 두 가지, 선은 0.5px 하나, 그림자는 떠 있는 것에만
+   ===================================================================== */
+:root{--ink2:var(--g5);--dotc:var(--g8)}
+html[data-theme="dark"]{--ink2:var(--g4);--dotc:var(--g0)}
+
+/* 라이브러리 */
+#libmain{padding-top:max(40px,env(safe-area-inset-top));padding-left:48px;padding-right:40px}
+.disp{font-size:28px;font-weight:600;letter-spacing:-.02em}
+.lhead{margin-bottom:40px}
+.ibtn{width:40px;height:40px;color:var(--ink2)}
+.ibtn:hover{color:var(--snow)}
+.ibtn:active{background:none;color:var(--snow)}
+.cgrid{gap:40px 28px}
+.cname{font-weight:500;margin-top:12px}
+.citem .cap{color:var(--ink2)}
+@media (max-width:819px){#libmain{padding-left:24px;padding-right:20px}}
+
+/* 사이드바: 배경 없이 글자 농도로 */
+#side{background:var(--bg);border-right:.5px solid var(--hair);padding-top:max(36px,env(safe-area-inset-top))}
+.brand{padding:0 12px 20px}
+.bname{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.sbar{background:none;border-bottom:.5px solid var(--hair);border-radius:0;margin:0 12px 16px;padding:0;height:36px}
+.sitem{height:40px;font-size:15px;color:var(--ink2);background:none!important;padding-left:12px}
+.sitem .ic{color:inherit}
+.sitem.on{color:var(--snow);font-weight:600}
+.sitem.on::after{content:"";position:absolute;right:12px;top:50%;width:5px;height:5px;margin-top:-2.5px;border-radius:50%;background:var(--dotc)}
+.fhead{font-size:12px;font-weight:500;color:var(--ink2);margin:28px 12px 6px}
+
+/* 버튼 */
+.btn{height:40px;border-radius:999px;font-size:15px;font-weight:600;padding:0 20px}
+.btn.primary{background:var(--g8);color:var(--g0)}
+html[data-theme="dark"] .btn.primary{background:var(--g0);color:var(--g8)}
+.btn.ghost{background:none;color:var(--ink2);font-weight:500}
+.btn.danger{background:none;color:var(--danger)}
+
+/* 에디터 상단: 아이콘만, 선택은 아래 작은 점 */
+#tabs{background:none;width:auto;gap:4px;padding:0;height:36px;display:flex}
+.tab{width:40px;height:36px;border-radius:8px;color:var(--ink2);background:none!important;box-shadow:none!important;position:relative}
+.tab[aria-selected="true"]{color:var(--snow)}
+.tab[aria-selected="true"]::after{content:"";position:absolute;left:50%;bottom:2px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--dotc)}
+.tool{color:var(--ink2)}
+.tool:hover:not(:disabled){background:none;color:var(--snow)}
+.tool[aria-pressed="true"]{background:none;color:var(--snow);position:relative}
+#tools .tool[aria-pressed="true"]::after{content:"";position:absolute;left:50%;bottom:0;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--dotc)}
+.round{color:var(--ink2)}
+.round:hover{color:var(--snow)}
+/* 펜: 고른 펜은 살짝 올라와 있고 아래 점 하나 */
+.pen{background:none!important;position:relative;border-radius:8px}
+.pen svg{transform:translateY(3px)!important}
+.pen.sel svg{transform:translateY(-2px)!important}
+.pen.sel::after{content:"";position:absolute;left:50%;bottom:0;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--dotc)}
+.penplus{border:0;color:var(--ink2)}
+
+/* 떠 있는 것 (메뉴·창): 모서리 14, 그림자 하나 */
+.popover{border-radius:14px;padding:8px;box-shadow:0 12px 40px rgba(33,37,41,.14),0 0 0 .5px var(--hair)}
+.ptitle{font-size:12px;color:var(--ink2);padding:6px 10px 4px}
+.pitem{min-height:40px;border-radius:8px;padding:0 10px;font-size:15px}
+.pitem+.pitem{box-shadow:none}
+.pitem:hover:not(:disabled),.pitem:active:not(:disabled){background:var(--fill)}
+.pitem.on{font-weight:600}
+.pitem.on::after{content:"";margin-left:auto;width:5px;height:5px;border-radius:50%;background:var(--dotc)}
+.modal{border-radius:14px;padding:28px}
+.modal.small{padding:24px 24px 16px}
+.backdrop{background:rgba(33,37,41,.22)}
+
+/* 확인 창: 왼쪽 정렬 제목, 오른쪽 아래 글자 버튼 */
+.dlg{text-align:left}
+.dlg h3{padding:0;margin:0 0 20px;font-size:17px;font-weight:600}
+.dlg-act{box-shadow:none;margin-top:8px;gap:4px;justify-content:flex-end}
+.dlg-act .btn{flex:none;height:40px;border-radius:999px;padding:0 16px;font-weight:500;box-shadow:none!important}
+.dlg-act .btn+.btn{font-weight:600}
+.dlg-act .btn.primary{background:var(--g8)!important;color:var(--g0)}
+html[data-theme="dark"] .dlg-act .btn.primary{background:var(--g0)!important;color:var(--g8)}
+
+/* 새 노트: 제목은 큰 글씨로 바로 */
+.newnote .tinput.ttl{background:none;border-radius:0;height:auto;padding:4px 0 10px;font-size:24px;font-weight:600;letter-spacing:-.02em;border-bottom:.5px solid var(--hair)}
+.newnote .tinput.ttl::placeholder{color:var(--ink2)}
+.newnote .dlg-act{margin-top:28px}
+.flabel{font-size:12px;color:var(--ink2);font-weight:500;margin:24px 0 10px}
+.cdot{width:24px;height:24px}
+.cdot.on{border-color:var(--dotc)}
+.tpick{border:0;padding:0;gap:8px;color:var(--ink2)}
+.tpick.on{color:var(--snow);font-weight:600}
+.tpick .paper.tmini{border-radius:4px}
+.tpick.on .paper.tmini{box-shadow:0 0 0 1.5px var(--dotc)}
+
+/* 설정: 한 줄씩, 선택지는 글자로 */
+.backdrop:has(.modal.page),.modal.page,.sh{background:var(--bg)}
+.modal.page .settings{max-width:560px;padding-top:max(32px,env(safe-area-inset-top))}
+.sh{gap:8px;padding:0 0 8px}
+.sh h2{font-size:28px;font-weight:600;letter-spacing:-.02em}
+.settings h4{margin:36px 0 4px;font-size:12px;color:var(--ink2);font-weight:500}
+.settings .srow{background:none;border-radius:0!important;padding:0;min-height:52px;box-shadow:none!important;border-bottom:.5px solid var(--hair)}
+.srow .sl{font-size:15px}
+.srow .seg{background:none;padding:0;gap:14px}
+.srow .seg button{background:none!important;box-shadow:none!important;padding:0;height:32px;font-size:14px;color:var(--ink2);position:relative;border-radius:0}
+.srow .seg button.on{color:var(--snow);font-weight:600}
+.srow .seg button.on::after{content:"";position:absolute;left:50%;bottom:0;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--dotc)}
+.switch{width:40px;height:24px;background:var(--fill2)}
+.switch i{width:20px;height:20px;top:2px;left:2px;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.switch[aria-checked="true"]{background:var(--g8)}
+html[data-theme="dark"] .switch[aria-checked="true"]{background:var(--g0)}
+html[data-theme="dark"] .switch[aria-checked="true"] i{background:var(--g8)!important}
+.switch[aria-checked="true"] i{left:18px}
+.stepper{background:none;gap:10px}
+.stepper button{width:28px;height:28px;color:var(--ink2)}
+
+/* 토스트: 조용한 글자 한 줄 */
+.toast{background:var(--g8);color:var(--g0);border-radius:999px;font-size:14px;padding:10px 18px}
+html[data-theme="dark"] .toast{background:var(--g0);color:var(--g8)}
+.sitem .sn,.fempty{display:none}
