@@ -1156,3 +1156,76 @@ html[data-theme="dark"] #editor.collapsed #handle{background:rgba(52,58,64,.7)!i
 .pplus svg{transition:transform .32s var(--spring)}
 .pull.armed .pplus svg{transform:scale(1.14)}
 .sver{margin:40px 0 8px;font-size:12px;color:var(--ink2);text-align:center;font-variant-numeric:tabular-nums}
+
+/* =====================================================================
+   다듬기: 곡선 속도, 색, 다크 모드, 화면 꽉 채우기
+   ===================================================================== */
+/* 모든 움직임은 처음에 빠르고 끝에서 부드럽게 멈춤 (곡선이 왼쪽 위로 볼록한 감속 곡선) */
+:root{--out:cubic-bezier(.16,1,.3,1);--settle:cubic-bezier(.16,1,.3,1)}
+*,*::before,*::after{transition-timing-function:var(--out)!important}
+
+/* 강조색 하나: 너무 회색 일색이지 않게 (선택 점, 스위치, 고무줄 고리) */
+:root{--acc:#4c5fd5;--dotc:var(--acc)}
+html[data-theme="dark"]{--acc:#8fa0ff;--dotc:var(--acc)}
+.switch[aria-checked="true"]{background:var(--acc)!important}
+.switch[aria-checked="true"] i{background:#fff!important}
+.pplus .arc{stroke:var(--acc)}
+.pull.armed .pplus .pl{stroke:var(--acc)}
+.cdot.on{border-color:var(--acc)}
+.tpick.on .paper.tmini{box-shadow:0 0 0 1.5px var(--acc)}
+::selection{background:rgba(76,95,213,.25)}
+
+/* 다크 모드: 검정은 아니지만 깊은 숯색, 살짝 푸른 기. 층마다 한 단계씩 밝아져 구분됨 */
+html[data-theme="dark"]{
+  --bg:#1d1e22; --night:#1d1e22; --raise:#2b2c31; --desk:#141518; --graphite:#2b2c31; --slate:#45474e;
+  --mist:#a4a7b0; --snow:#eceef2; --ink2:#a4a7b0; --lilac:#eceef2; --on-lilac:#1d1e22;
+  --hair:rgba(255,255,255,.10); --fill:rgba(255,255,255,.06); --fill2:rgba(255,255,255,.11);
+  --group:#2b2c31; --grouped-bg:#1d1e22; --float-bg:#eceef2; --float-fg:#1d1e22;
+}
+html[data-paper="dark"]{--paper:#26272c;--paper-line:#3b3d44;--paper-line2:#303238;--paper-label:#9a9da6;--ink:#e8e9ee}
+html[data-paper="dark"] .tpl-lined{--paper-line:#41434a}
+html[data-theme="dark"] .page{box-shadow:0 0 0 .5px rgba(255,255,255,.07),0 8px 28px rgba(0,0,0,.45)}
+html[data-theme="dark"] .popover,html[data-theme="dark"] .modal{background:#2b2c31}
+html[data-theme="dark"] .modal.page,html[data-theme="dark"] .backdrop:has(.modal.page),html[data-theme="dark"] .sh{background:#1d1e22}
+html[data-theme="dark"] #chrome,html[data-theme="dark"] #editor.collapsed #handle{background:rgba(43,44,49,.72)!important}
+html[data-paper="dark"] .qcard,html[data-paper="dark"] .qc-act{background:#2b2c31}
+html[data-paper="dark"] .qch.on .qcn{background:#e8e9ee;color:#26272c}
+html[data-theme="dark"] .btn.primary,html[data-theme="dark"] .dlg-act .btn.primary{background:#eceef2!important;color:#1d1e22}
+html[data-theme="dark"] .toast{background:#eceef2;color:#1d1e22}
+
+/* 화면 꽉 채우기: 열면 페이지가 화면 너비 그대로 */
+.scroll{padding-left:0!important;padding-right:0!important;padding-bottom:120px}
+.pages{gap:14px}
+.page{border-radius:0}
+.paper{border-radius:0}
+
+/* 줄·모눈·점은 캔버스(.tplc)가 그림 */
+.page .paper.tpl-lined,.page .paper.tpl-grid,.page .paper.tpl-dot{background-image:none!important}
+.paper canvas.tplc{z-index:0;pointer-events:none}
+
+/* 스크롤 막대 숨김 (스크롤할 때마다 오른쪽에 뜨던 막대) */
+*{scrollbar-width:none}
+*::-webkit-scrollbar{display:none}
+
+/* 검색칸: 누르면 생기던 네모 테두리 없앰, 아래 선만 진해짐 */
+.sbar:focus-within,.sq:focus,.sq:focus-visible,label:focus-within{outline:none!important}
+.sbar:focus-within{border-bottom-color:var(--snow)}
+
+/* 펜: 원래 모양 그대로, 고른 펜만 살짝 들어 올림 (배경·점 없음) */
+#tray{overflow:visible;align-items:center;align-self:center;height:44px;gap:2px}
+.pen{width:38px;height:44px;align-items:center}
+.pen svg{width:32px;height:32px;transform:translateY(2px)!important}
+.pen.sel svg{transform:translateY(-4px) scale(1.06)!important}
+@media (hover:hover){.pen:not(.sel):hover svg{transform:translateY(0)!important}}
+
+/* 화면 이동: 종이를 들어 올리듯 살짝 올라오며 자리 잡음, 뒤의 서재는 살짝 물러남 */
+#editor{transform:translateY(18px) scale(.985);transform-origin:50% 30%;transition:opacity .38s var(--out)!important,transform .46s var(--out)!important}
+#editor.shown{transform:none}
+#lib{transition:transform .46s var(--out),opacity .38s var(--out)}
+#lib.behind{transform:scale(.97);opacity:.4}
+.lbody.enter{animation:rise .42s var(--out)!important}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}}
+/* 도구 막대를 숨긴 뒤의 ⋯ */
+#editor.collapsed #handle{transition:transform .3s var(--out)!important}
+@media (prefers-reduced-motion:reduce){#editor,#lib,.lbody{transition:none!important;animation:none!important;transform:none!important}}
+#chrome,#handle{touch-action:none}

@@ -10,6 +10,7 @@ const MODE_NAME = { pen: '펜', eraser: '지우개' };
 /* =============== 들어가기 / 나가기 =============== */
 Y.enterEditor = function (o) {
   const ed = $('#editor');
+  clearTimeout(Y._closeT);   // 닫히는 중에 다시 열면 닫기를 취소
   Y.panes.slice().forEach(Y.destroyPane);
   $('#panes').innerHTML = '';
   ed.hidden = false; ed.classList.remove('shown', 'collapsed'); ed.classList.remove('split');
@@ -20,16 +21,19 @@ Y.enterEditor = function (o) {
   Y.active = P; P.root.classList.add('active');
   Y.openDoc(P, o.doc);
   measureChrome(); renderAll();
-  const reveal = () => { requestAnimationFrame(() => ed.classList.add('shown')); setTimeout(() => { $('#lib').hidden = true; }, 160); };
+  const reveal = () => { $('#lib').classList.add('behind'); requestAnimationFrame(() => requestAnimationFrame(() => ed.classList.add('shown'))); clearTimeout(Y._libT); Y._libT = setTimeout(() => { $('#lib').hidden = true; $('#lib').classList.remove('behind'); }, 420); };
   reveal();   // 표지에서 커지는 전환 없이 짧은 페이드만
   Y.haptic(8);
 };
 Y.closeEditor = function () {
   Y.closePopover(); Y.saveAll();
   const ed = $('#editor');
-  $('#lib').hidden = false; Y.libRefresh && Y.libRefresh();
+  clearTimeout(Y._libT);
+  const lib = $('#lib'); lib.classList.add('behind'); lib.hidden = false; Y.libRefresh && Y.libRefresh();
+  requestAnimationFrame(() => requestAnimationFrame(() => lib.classList.remove('behind')));
   ed.classList.remove('shown');
-  setTimeout(() => { ed.hidden = true; Y.panes.slice().forEach(Y.destroyPane); $('#panes').innerHTML = ''; }, 220);
+  clearTimeout(Y._closeT);
+  Y._closeT = setTimeout(() => { ed.hidden = true; Y.panes.slice().forEach(Y.destroyPane); $('#panes').innerHTML = ''; }, 380);
 };
 
 function measureChrome() {
@@ -444,7 +448,39 @@ function toggleChrome() {
   $('#editor').classList.toggle('collapsed', E.collapsed); measureChrome();
   setTimeout(() => Y.panes.forEach(P => P.zoom === 'fit' && Y.layout(P)), 270);
 }
-$('#handle').addEventListener('click', toggleChrome);
+$('#handle').addEventListener('click', () => { if (!E.dragged) toggleChrome(); });
+/* 떠 있는 도구 막대는 블라인드처럼: 빈 곳을 잡고 위로 끌면 따라 올라가고, 충분히 올리면 숨음
+   숨긴 뒤 ⋯ 를 아래로 끌거나 누르면 다시 내려옴 */
+(function () {
+  const bar = $('#chrome'), hd = $('#handle');
+  let d = null;
+  const start = (e, el, mode) => { d = { y0: e.clientY, dy: 0, el, mode, id: e.pointerId }; E.dragged = false; try { el.setPointerCapture(e.pointerId); } catch (_) {} };
+  bar.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'pen' || E.collapsed || e.target.closest('button, input, #tools, #tray, #doctabs')) return;
+    start(e, bar, 'up');
+  });
+  hd.addEventListener('pointerdown', e => start(e, hd, 'down'));
+  const move = e => {
+    if (!d || e.pointerId !== d.id) return;
+    d.dy = e.clientY - d.y0; if (Math.abs(d.dy) > 6) E.dragged = true;
+    if (d.mode === 'up') {
+      // 위로는 손을 따라가고, 아래로는 고무줄처럼 조금만
+      const y = d.dy < 0 ? d.dy : d.dy * 0.25;
+      bar.style.transition = 'none'; bar.style.transform = 'translateY(' + y + 'px)';
+    } else if (d.dy > 0) {
+      hd.style.transition = 'none'; hd.style.transform = 'translateY(' + Math.min(80, d.dy * 0.6) + 'px)';
+    }
+  };
+  const end = e => {
+    if (!d || e.pointerId !== d.id) return;
+    const m = d.mode, dy = d.dy; d = null;
+    bar.style.transition = ''; bar.style.transform = ''; hd.style.transition = ''; hd.style.transform = '';
+    if (m === 'up' && dy < -36) { toggleChrome(); Y.haptic(8); }
+    else if (m === 'down' && dy > 30) { toggleChrome(); Y.haptic(8); }
+    setTimeout(() => { E.dragged = false; }, 50);
+  };
+  [bar, hd].forEach(el => { el.addEventListener('pointermove', move); el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); });
+})();
 $('#title').addEventListener('input', e => { const P = Y.active; if (P && P.doc) { P.doc.title = e.target.value; Y.queueSave(P); } });
 $('#title').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
 

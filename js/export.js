@@ -76,7 +76,7 @@ function drawTemplate(page, tpl, W, H) {
 async function snap(el, w, transparent) {
   const c = await html2canvas(el, {
     scale: RASTER_W / w, backgroundColor: transparent ? null : '#ffffff', logging: false, useCORS: true,
-    ignoreElements: n => n.tagName === 'CANVAS' && (n.classList.contains('ink') || n.classList.contains('pv')),
+    ignoreElements: n => n.tagName === 'CANVAS' && (n.classList.contains('ink') || n.classList.contains('pv') || n.classList.contains('tplc')),
     onclone: d => {
       if (d.documentElement.dataset.paper === 'dark') d.documentElement.dataset.paper = 'white';
       d.querySelectorAll('.qcard, .toast').forEach(x => x.remove());

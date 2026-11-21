@@ -153,12 +153,12 @@ function renderBody() {
     if (trash) { if (notes.length) act.append(Y.btn('trash', '휴지통 비우기', emptyTrash, { cls: 'sbtn warn' })); }
     else {
       act.append(ib('importf', '가져오기', () => $('#libfile').click()));
-      act.append(ib('compose', '새 노트', newNoteModal));
+      act.append(ib('plus', '새 노트', newNoteModal));
     }
   }
   main.append(h('header', { class: 'lhead' }, title, act));
   /* 내용 */
-  const body = h('div', { class: 'lbody' });
+  const body = h('div', { class: 'lbody' + (L._shown !== L.view ? ' enter' : '') }); L._shown = L.view;
   if (!notes.length) body.append(emptyState(trash));
   else if (L.mode === 'cover' || trash === false && false) {
     const grid = h('div', { class: 'cgrid' });
@@ -237,8 +237,12 @@ function movePop(anchor) {
 
 /* ---------- 새 노트 ---------- */
 function newNoteModal() {
-  const st = { title: '새 노트', cover: Y.COVERS[0].id, tpl: 'lined' };
-  const inp = h('input', { type: 'text', class: 'tinput ttl', value: '', placeholder: '새 노트', maxlength: 40, 'aria-label': '노트 제목' });
+  // 새 노트 1, 새 노트 2 … 비어 있는 다음 번호
+  const used = new Set(Y.lib.notes.filter(n => !n.trashed).map(n => n.title));
+  let k = 1; while (used.has('새 노트 ' + k)) k++;
+  const auto = '새 노트 ' + k;
+  const st = { title: auto, cover: Y.COVERS[0].id, tpl: 'lined' };
+  const inp = h('input', { type: 'text', class: 'tinput ttl', value: '', placeholder: auto, maxlength: 40, 'aria-label': '노트 제목' });
   const covers = h('div', { class: 'swrow', role: 'radiogroup', 'aria-label': '커버 색' });
   const tpls = h('div', { class: 'tplrow', role: 'radiogroup', 'aria-label': '페이지 양식' });
   const paint = () => {
@@ -249,12 +253,12 @@ function newNoteModal() {
       (() => { const mk = t[0] === 'planner' || t[0] === 'recipe'; const d = h('div', { class: 'paper tpl-' + t[0] + ' tmini', style: '--dp:' + (mk ? '.125px' : '.32px') }); if (mk) d.innerHTML = Y.tplHTML(t[0]); return d; })(), h('span', { text: t[1] }))));
   };
   const pv = h('div', { class: 'npprev' });
-  const prev = () => { pv.innerHTML = ''; pv.append(coverEl({ title: inp.value || '새 노트', cover: st.cover })); };
+  const prev = () => { pv.innerHTML = ''; pv.append(coverEl({ title: inp.value || auto, cover: st.cover })); };
   inp.addEventListener('input', prev);
   paint(); prev();
   let m;
   const go = () => {
-    const now = Date.now(), id = Y.uid(), title = inp.value.trim() || '새 노트';
+    const now = Date.now(), id = Y.uid(), title = inp.value.trim() || auto;
     const meta = { id, title, cover: st.cover, folder: L.view.startsWith('f:') ? L.view.slice(2) : null, fav: false, trashed: false, created: now, updated: now, pageCount: 1 };
     Y.lib.notes.push(meta); Y.saveLib();
     Y.store.set('yeobaek.v2.n.' + id, { pages: [{ ratio: Y.RATIO, tpl: st.tpl, strokes: [], texts: [] }] });

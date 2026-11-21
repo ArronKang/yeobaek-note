@@ -99,10 +99,11 @@ Y.clean = s => String(s == null ? '' : s).replace(/\s*[·•]\s*/g, ' ').replace
 
 /* ---------- 토큰 상수 ---------- */
 Y.COVERS = [
-  { id: 'char', name: '차콜', c: '#212529' }, { id: 'slate', name: '슬레이트', c: '#343a40' },
-  { id: 'sage', name: '그래파이트', c: '#495057' }, { id: 'rose', name: '스톤', c: '#6c757d' },
-  { id: 'mustard', name: '페블', c: '#868e96' }, { id: 'terra', name: '애시', c: '#adb5bd', light: true },
-  { id: 'moss', name: '미스트', c: '#ced4da', light: true }, { id: 'plum', name: '클라우드', c: '#dee2e6', light: true }
+  // 너무 회색 일색이지 않게: 채도를 낮춘 차분한 색 (흰 글자가 잘 보이는 밝기)
+  { id: 'char', name: '먹', c: '#2b2d31' }, { id: 'slate', name: '남색', c: '#3b4a63' },
+  { id: 'sage', name: '세이지', c: '#5f7a6b' }, { id: 'rose', name: '로즈', c: '#a2616c' },
+  { id: 'mustard', name: '머스터드', c: '#b08636' }, { id: 'terra', name: '테라코타', c: '#a35a43' },
+  { id: 'moss', name: '이끼', c: '#6c7a4a' }, { id: 'plum', name: '자두', c: '#6b5884' }
 ];
 Y.coverLight = id => !!(Y.COVERS.find(c => c.id === id) || {}).light;
 Y.PEN_COLORS = ['#1A1A20', '#2B4FD8', '#1F9D6B', '#E5484D', '#F2A93B', '#7A5AF8'];
