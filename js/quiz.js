@@ -222,6 +222,8 @@ function paintBlock(root, doc, i, anim) {
     b.setAttribute('aria-pressed', +sel === n ? 'true' : 'false');
   });
   qb.querySelectorAll('.qbtn').forEach(b => b.classList.toggle('open', !!rev[b.dataset.act]));
+  // 정답 표시는 도장처럼 꾹 (방금 바뀐 때만)
+  if (anim && !Y.reduced.matches) qb.querySelectorAll('.qch.correct').forEach(b => { b.classList.remove('stamp'); void b.offsetWidth; b.classList.add('stamp'); });
   qb.classList.toggle('graded', !!g); qb.classList.toggle('right', g === 'o'); qb.classList.toggle('wrong', g === 'x');
   const mk = qb.querySelector('.qmark');
   const want = g ? g : '';
@@ -290,7 +292,9 @@ function openCard(qb, doc, i, at, pt, press) {
   const up = below + ch > pr.height - 12 * dp && py - pr.top - ch - 22 * dp > 8 * dp;
   card.classList.toggle('up', up);
   card.style.top = Math.max(8 * dp, up ? py - pr.top - ch - 22 * dp : Math.min(below, pr.height - ch - 12 * dp)) + 'px';
-  card.style.transformOrigin = '50% ' + (up ? '100%' : '0');
+  // 누른 손끝 자리에서 펼쳐짐
+  const ox = pt ? Math.max(0, Math.min(card.offsetWidth, pt.x - pr.left - card.offsetLeft)) + 'px' : '50%';
+  card.style.transformOrigin = ox + ' ' + (up ? '100%' : '0');
   requestAnimationFrame(() => card.classList.add('in'));
   qb.classList.add('peek');
   if (press) drag = { card, hot: null };

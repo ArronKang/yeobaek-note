@@ -100,14 +100,15 @@ function createPage(P, pg, before) {
   if (before) P.pages.insertBefore(wrap, before); else P.pages.append(wrap);
   buildTexts(pg);
 }
-Y.addPage = function (P, tpl) {
+Y.addPage = function (P, tpl, o) {
   const last = P.doc.pages[P.doc.pages.length - 1];
   const pg = Y.makePage(tpl || (last && last.tpl) || 'lined');
   P.doc.pages.push(pg);
   createPage(P, pg, P.addBtn);
   setSizes(pg); P.io.observe(pg.el);
   queueSave(P); updatePageIdx(P);
-  pg.el.scrollIntoView({ behavior: Y.reduced.matches ? 'auto' : 'smooth', block: 'start' });
+  if (!(o && o.stay)) pg.el.scrollIntoView({ behavior: Y.reduced.matches ? 'auto' : 'smooth', block: 'start' });
+  return pg;
 };
 Y.setTemplate = function (pg, tpl) {
   pg.tpl = tpl;
@@ -214,7 +215,19 @@ function anc(P, i) {
   if (i <= 0) return P[0]; if (i >= n) return P[n - 1];
   return [(P[i - 1][0] + P[i][0]) / 2, (P[i - 1][1] + P[i][1]) / 2];
 }
-function strokeColor(st) { return paperDark() && st.c.toUpperCase() === '#1A1A20' ? '#F2F2F6' : st.c; }
+// 어두운 종이: 검정 펜은 흰색, 색 펜은 밝게 섞어서 보여 줌 (저장된 색은 그대로)
+const lightCache = {};
+function lighten(c) {
+  if (lightCache[c]) return lightCache[c];
+  const m = /^#?([0-9a-f]{6})$/i.exec(c); if (!m) return c;
+  const n = parseInt(m[1], 16), mix = v => Math.round(v + (255 - v) * 0.38);
+  return (lightCache[c] = 'rgb(' + mix(n >> 16 & 255) + ',' + mix(n >> 8 & 255) + ',' + mix(n & 255) + ')');
+}
+function strokeColor(st) {
+  if (!paperDark()) return st.c;
+  if (st.c.toUpperCase() === '#1A1A20') return '#F2F2F6';
+  return st.t === 'hl' ? st.c : lighten(st.c);
+}
 function segWidth(st, k, K) {
   const P = st.p, n = st._live ? 1e9 : P.length, c = P[k], pr = c[2] || 0.5, base = st.s * K;
   const a = P[Math.max(0, k - 1)], b = P[Math.min(P.length - 1, k + 1)];
@@ -552,7 +565,10 @@ function glide(P, vx, vy) {
     const dt = Math.min(32, now - last); last = now;
     const k = Math.pow(0.9965, dt);           // 마찰: 부드럽게 감속
     vx *= k; vy *= k;
+    const t0 = P.scroll.scrollTop;
     P.scroll.scrollLeft += vx * dt; P.scroll.scrollTop += vy * dt;
+    // 벽에 부딪힘: 남은 속도만큼 눌렸다가 튕겨 나옴
+    if (Math.abs(vy) > 0.4 && Math.abs(P.scroll.scrollTop - t0) < Math.abs(vy * dt) * 0.5) { P.glide = 0; Y.bounce(P, Math.sign(vy) * Math.min(90, Math.abs(vy) * 45)); return; }
     if (Math.hypot(vx, vy) < 0.02) { P.glide = 0; return; }
     P.glide = requestAnimationFrame(step);
   };
@@ -674,7 +690,11 @@ function onMove(e) {
     S.hist.push([e.clientX, e.clientY, performance.now()]); if (S.hist.length > 6) S.hist.shift();
     if (!S.raf) S.raf = requestAnimationFrame(() => {
       S.raf = 0; const l = S.hist[S.hist.length - 1];
-      P.scroll.scrollTop = S.t0 - (l[1] - S.y0);
+      const want = S.t0 - (l[1] - S.y0), max = P.scroll.scrollHeight - P.scroll.clientHeight;
+      // 끝을 넘어 당기면 고무줄처럼 늘어남 (넘은 만큼은 스크롤 대신 당김으로)
+      if (want > max) { P.scroll.scrollTop = max; Y.pull(P, want - max); }
+      else if (want < 0) { P.scroll.scrollTop = 0; Y.pull(P, want); }
+      else { if (P.pullRaw) Y.pull(P, 0); P.scroll.scrollTop = want; }
       P.scroll.scrollLeft = S.l0 - (l[0] - S.x0);
     });
     return;
@@ -728,6 +748,8 @@ function onUp(e) {
   if (!P) return;
   if (P.scrolling && P.scrolling.id === e.pointerId) {
     const S = P.scrolling; P.scrolling = null;
+    if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
+    if (P.pullRaw) { Y.pullRelease(P); return; }
     const now = performance.now(), hs = S.hist.filter(q => now - q[2] < 100);
     if (hs.length >= 2 && e.type !== 'pointercancel') {
       const a = hs[0], b = hs[hs.length - 1], dt = Math.max(8, b[2] - a[2]);

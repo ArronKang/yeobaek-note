@@ -1008,3 +1008,99 @@ html[data-theme="dark"] .switch[aria-checked="true"] i{background:var(--g8)!impo
 .toast{background:var(--g8);color:var(--g0);border-radius:999px;font-size:14px;padding:10px 18px}
 html[data-theme="dark"] .toast{background:var(--g0);color:var(--g8)}
 .sitem .sn,.fempty{display:none}
+
+/* =====================================================================
+   만져 본 적 있는 움직임 (실생활 은유)
+   처음 봐도 결과를 예상할 수 있게: 고무줄, 용수철, 유리, 도장, 종이
+   - 움직임은 손에서 시작해 손으로 끝남 (누른 자리에서 펼쳐지고, 놓으면 돌아감)
+   - 깜빡임·블러 전환은 여전히 금지. 물리적인 이동과 크기만
+   ===================================================================== */
+:root{--spring:cubic-bezier(.34,1.45,.55,1);--settle:cubic-bezier(.2,.9,.25,1)}
+
+/* ---------- 다크 모드: 숯 회색 위에 종이 (너무 어둡지 않게) ---------- */
+html[data-theme="dark"]{
+  --bg:var(--g7); --night:var(--g7); --raise:var(--g6); --desk:var(--g8); --graphite:var(--g6); --slate:var(--g5);
+  --mist:var(--g3); --snow:var(--g0); --ink2:var(--g3); --dotc:var(--g0);
+  --hair:rgba(248,249,250,.16); --fill:rgba(248,249,250,.09); --fill2:rgba(248,249,250,.16);
+  --lilac:var(--g1); --on-lilac:var(--g8); --group:var(--g6); --grouped-bg:var(--g7);
+  --float-bg:var(--g0); --float-fg:var(--g8);
+}
+html[data-paper="dark"]{--paper:var(--g6);--paper-line:var(--g5);--paper-line2:rgba(248,249,250,.10);--paper-label:var(--g3);--ink:var(--g0)}
+html[data-theme="dark"] .page{box-shadow:0 0 0 .5px rgba(248,249,250,.10),0 6px 24px rgba(0,0,0,.35)}
+html[data-theme="dark"] .cover{box-shadow:inset 0 0 0 .5px rgba(248,249,250,.18)}
+html[data-theme="dark"] .popover{background:var(--g6);box-shadow:0 12px 40px rgba(0,0,0,.45),0 0 0 .5px var(--hair)}
+html[data-theme="dark"] .modal{background:var(--g6)}
+html[data-theme="dark"] .modal.page,html[data-theme="dark"] .backdrop:has(.modal.page),html[data-theme="dark"] .sh{background:var(--g7)}
+html[data-theme="dark"] .tinput{background:var(--fill)}
+html[data-theme="dark"] .newnote .tinput.ttl{background:none}
+html[data-paper="dark"] .qcard{background:var(--g6);border-color:var(--hair)}
+html[data-paper="dark"] .qpass{border-color:var(--g5)}
+html[data-paper="dark"] .qmark path,html[data-paper="dark"] .qscore path{stroke:#ff8787}
+html[data-paper="dark"] .qscore,html[data-paper="dark"] .qrv,html[data-paper="dark"] .qc-c,html[data-paper="dark"] .qc-act.x,html[data-paper="dark"] .qc-res.x{color:#ff8787}
+html[data-paper="dark"] .qch.correct .qcn::after{border-color:#ff8787}
+html[data-paper="dark"] .qc-act.o,html[data-paper="dark"] .qc-res.o{color:#8ce99a}
+html[data-paper="dark"] .qc-act{background:var(--g6)}
+html[data-paper="dark"] .qch.on .qcn{background:var(--g0);color:var(--g7)}
+html[data-paper="dark"] .tpl-lined{--paper-line:rgba(248,249,250,.22)}
+
+/* ---------- 상단 도구: 종이 위에 떠 있는 유리판 ----------
+   뒤의 종이가 비쳐 보여서 "위에 얹혀 있다"는 게 보임. 움직이지 않는 질감이라 깜빡이지 않음 */
+#chrome{top:8px;left:8px;right:8px;border-radius:18px;border:0!important;
+  background:rgba(248,249,250,.72)!important;-webkit-backdrop-filter:blur(22px) saturate(1.6)!important;backdrop-filter:blur(22px) saturate(1.6)!important;
+  box-shadow:inset 0 .5px 0 rgba(255,255,255,.9),0 0 0 .5px rgba(33,37,41,.08),0 6px 24px rgba(33,37,41,.10)}
+html[data-theme="dark"] #chrome{background:rgba(52,58,64,.70)!important;box-shadow:inset 0 .5px 0 rgba(255,255,255,.14),0 0 0 .5px rgba(248,249,250,.10),0 6px 24px rgba(0,0,0,.35)}
+#editor.collapsed #chrome{transform:translateY(calc(-100% - 16px))}
+#chrome{transition:transform .38s var(--settle)!important}
+.scroll{padding-top:calc(var(--chrome-h) + 32px)}
+#handle{top:2px}
+#pagebar{top:calc(var(--chrome-h) + 16px);border-radius:0 14px 14px 0;bottom:8px}
+
+/* ---------- 메뉴·카드: 누른 자리에서 튀어나옴 (말풍선처럼) ---------- */
+.popover{transform:scale(.9)!important;opacity:0;transition:opacity .14s ease,transform .32s var(--spring)!important}
+.popover.in{transform:none!important;opacity:1}
+.qcard{transform:scale(.92)!important;transition:opacity .14s ease,transform .34s var(--spring)!important}
+.qcard.in{transform:none!important}
+/* 창: 책상에 종이를 내려놓듯 아래에서 살짝 */
+.modal{transform:translateY(14px)!important;transition:transform .34s var(--settle)!important}
+.backdrop.in .modal{transform:none!important}
+.modal.page{transform:translateX(24px)!important}
+.backdrop.in .modal.page{transform:none!important}
+.toast{transform:translate(-50%,10px)!important;transition:opacity .16s,transform .3s var(--spring)!important}
+.toast.in{transform:translate(-50%,0)!important}
+
+/* ---------- 펜: 펜꽂이에서 뽑아 올림 ---------- */
+.pen svg{transition:transform .34s var(--spring)!important}
+/* 스위치: 손잡이가 미끄러져 딸깍 */
+.switch i{transition:left .3s var(--spring)!important}
+.switch{transition:background-color .2s ease!important}
+/* 눌림: 버튼은 손가락에 살짝 눌림 */
+.ibtn:active,.tool:active:not(:disabled),.pen:active,.btn:active,.tab:active{transform:scale(.92)!important;transition:transform .08s ease!important}
+.citem:active .cover{transform:scale(.97)!important;transition:transform .1s ease!important}
+
+/* ---------- 채점: 빨간 펜으로 긋고, 도장처럼 찍음 ---------- */
+.qmark.anim path,.qscore.anim path{animation:qdraw .55s cubic-bezier(.4,0,.2,1) .05s backwards!important}
+.qch.correct.stamp .qcn::after{animation:stamp .42s var(--spring)!important}
+@keyframes stamp{0%{transform:scale(1.7);opacity:0}40%{opacity:1}100%{transform:scale(1);opacity:1}}
+
+/* ---------- 고무줄로 당겨 새 페이지 ---------- */
+.addpage{display:none!important}
+.pull{position:absolute;left:0;right:0;bottom:0;height:0;pointer-events:none;z-index:4}
+.pfr{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);border-radius:4px;border:1.5px dashed var(--slate);
+  transition:background-color .18s ease,border-color .18s ease,box-shadow .18s ease}
+.pull.armed .pfr{border:1.5px solid transparent;background:var(--paper);box-shadow:0 0 0 .5px var(--hair)}
+.pplus{position:absolute;left:50%;width:40px;height:40px;transform-origin:50% 50%}
+.pplus svg{width:40px;height:40px;overflow:visible}
+.pplus circle{fill:none;stroke-width:2}
+.pplus .trk{stroke:var(--hair)}
+.pplus .arc{stroke:var(--snow);stroke-dasharray:106.8;stroke-linecap:round;transform:rotate(-90deg);transform-origin:20px 20px}
+.pplus .pl{stroke:var(--mist);stroke-width:2;stroke-linecap:round;fill:none;transition:stroke .15s}
+.pull.armed .pplus .pl{stroke:var(--snow)}
+.pull.armed .pplus .trk{fill:var(--fill2)}
+.page.born{animation:born .5s var(--spring)!important}
+@keyframes born{from{transform:scale(.97)}}
+
+@media (prefers-reduced-motion:reduce){
+  .popover,.qcard,.modal,.toast,.pen svg,.switch i{transition-duration:.01ms!important}
+  .qmark.anim path,.qscore.anim path,.qch.correct.stamp .qcn::after,.page.born{animation:none!important}
+}
+#editor.pulling #chip{opacity:0!important}
