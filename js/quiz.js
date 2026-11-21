@@ -26,35 +26,41 @@ Y.parseQuiz = function (text) {
   let j; try { j = JSON.parse(text); } catch (e) { throw new Error('형식'); }
   if (!j || !Array.isArray(j.problems) || !j.problems.length) throw new Error('형식');
   let no = 0;
-  j.problems = j.problems.map((p, i) => p.type === 'passage' ? ({ type: 'passage', q: p.q || '', text: p.text || '', id: String(p.id || 'p' + i) }) : ({
+  // 그림: { src: 'data:image/...', w, h } (w·h는 페이지 너비 560 기준 크기). 크기를 미리 알아야 페이지를 정확히 나눔
+  const img = v => v && typeof v.src === 'string' && /^data:image\/(png|jpeg|webp|svg\+xml);/.test(v.src) && +v.w > 0 && +v.h > 0
+    ? { src: v.src, w: Math.min(472, +v.w), h: +v.h * Math.min(1, 472 / +v.w) } : null;
+  j.problems = j.problems.map((p, i) => p.type === 'passage' ? ({ type: 'passage', q: p.q || '', text: p.text || '', img: img(p.img), id: String(p.id || 'p' + i) }) : ({
     no: ++no,
     id: String(p.id || i + 1), type: p.type === 'short' ? 'short' : 'choice',
     q: p.q || '', choices: Array.isArray(p.choices) ? p.choices.slice(0, 8) : [],
     answer: p.answer, solution: p.solution || '', points: p.points || 0,
     space: Math.max(30, Math.min(500, +p.space || (p.type === 'short' ? 130 : 70))),
-    orig: +p.orig || 0
+    orig: +p.orig || 0, img: img(p.img)
   }));
   j.title = j.title || '문제지'; j.subject = j.subject || '';
   return j;
 };
 
 /* ---------- 문항 마크업 (단위: --dp) ---------- */
-function choiceCols(p) {
-  const L = Math.max.apply(null, p.choices.map(c => String(c).replace(/\$[^$]*\$/g, 'xxx').length));
+function choiceCols(p, lv) {
+  // 수식은 명령어·괄호를 빼고 실제로 보이는 글자 수로 셈 (\dfrac은 세로로 쌓여 짧게)
+  const vis = m => m.replace(/\\(d?frac|left|right|displaystyle|,|;|!|quad)/g, '').replace(/\\[a-zA-Z]+/g, 'x').replace(/[{}^_\s]/g, '');
+  const L = Math.max.apply(null, p.choices.map(c => lv >= 3 ? String(c).replace(/\$([^$]*)\$/g, (_, m) => vis(m)).length : String(c).replace(/\$[^$]*\$/g, 'xxx').length));
   return L <= 6 ? 5 : L <= 16 ? 3 : 1;
 }
-// 간격 버전: 1 = 처음 간격(이미 필기한 문제지), 2 = 촘촘한 간격
-const LV = 2;
+// 배치 버전: 1 = 처음 간격(이미 필기한 문제지), 2 = 촘촘한 간격, 3 = 수식 보기 칸 계산 개선
+const LV = 3;
 const workH = (p, lv) => lv >= 2 ? Math.max(14, Math.round(p.space * 0.45)) : p.space;
 const gapOf = lv => lv >= 2 ? 16 : 26;
+const imgHTML = m => m ? '<img class="qimg" alt="" src="' + m.src + '" style="width:calc(' + m.w + ' * var(--dp));height:calc(' + m.h + ' * var(--dp))">' : '';
 function blockHTML(spec, idx, lv) {
   const p = spec.problems[idx];
-  if (p.type === 'passage') return '<div class="qb qpass" data-qi="' + idx + '">' + (p.q ? '<div class="qp-h">' + tex(p.q) + '</div>' : '') + '<div class="qp-t">' + tex(p.text) + '</div></div>';
+  if (p.type === 'passage') return '<div class="qb qpass" data-qi="' + idx + '">' + (p.q ? '<div class="qp-h">' + tex(p.q) + '</div>' : '') + (p.text ? '<div class="qp-t">' + tex(p.text) + '</div>' : '') + imgHTML(p.img) + '</div>';
   let s = '<div class="qb" data-qi="' + idx + '">' +
     '<div class="qhead"><button type="button" class="qno" aria-label="' + p.no + '번 다시 볼 문제 표시">' + p.no + '<svg class="qmark" viewBox="0 0 40 40" aria-hidden="true"></svg><span class="qstar">' + Y.ic('star') + '</span></button>' +
-    '<div class="qtext">' + tex(p.q) + (p.points ? ' <span class="qpts">[' + p.points + '점]</span>' : '') + (p.orig ? ' <span class="qpts">(' + p.orig + '번)</span>' : '') + '</div></div>';
+    '<div class="qtext">' + tex(p.q) + (p.points ? ' <span class="qpts">[' + p.points + '점]</span>' : '') + (p.orig ? ' <span class="qpts">(' + p.orig + '번)</span>' : '') + '</div></div>' + (p.img ? '<div class="qfig">' + imgHTML(p.img) + '</div>' : '');
   if (p.type === 'choice' && p.choices.length) {
-    s += '<div class="qchoices c' + choiceCols(p) + '">' + p.choices.map((c, i) =>
+    s += '<div class="qchoices c' + choiceCols(p, lv) + '">' + p.choices.map((c, i) =>
       '<button type="button" class="qch" data-i="' + (i + 1) + '" aria-label="' + (i + 1) + '번 보기"><span class="qcn">' + CIRC[i] + '</span><span class="qct">' + tex(c) + '</span></button>').join('') + '</div>';
   }
   s += '<div class="qwork" style="height:calc(' + workH(p, lv) + ' * var(--dp))">' + (p.type === 'short' ? '<div class="qansline"><span>답</span><b></b></div>' : '') + '</div>';

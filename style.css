@@ -885,3 +885,9 @@ html[data-theme="dark"] .switch[aria-checked="true"]{background:var(--g4)}
 .qc-act{border-radius:calc(10 * var(--dp));border-color:var(--paper-line2);background:var(--paper)}
 .modal.wide .tplrow{grid-template-columns:repeat(6,1fr)}
 @media (max-width:520px){.modal.wide .tplrow{grid-template-columns:repeat(3,1fr)}}
+
+/* 문제 그림 (.ybq img) */
+.qfig{margin:calc(8 * var(--dp)) 0 0 calc(32 * var(--dp))}
+.qimg{display:block;max-width:100%;object-fit:contain}
+.qpass .qimg{margin:calc(8 * var(--dp)) auto 0}
+html[data-paper="dark"] .qimg{filter:invert(.88) hue-rotate(180deg)}
