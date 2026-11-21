@@ -132,6 +132,12 @@ Y.exportPdf = async function (P) {
         pr.set((i + 1) / d.pages.length);
       }
     }
+    // 여백 문제지·노트는 원본을 PDF 안에 첨부: 다른 앱에선 평범한 PDF, 여백에서 열면 다시 문제지/노트로
+    if (d.type === 'quiz' || d.type === 'note') {
+      const pack = { yeobaek: 1, kind: d.type, title: d.title, lv: d.lv, ybq: d.quiz, qs: d.qs,
+        pages: d.pages.map(p => ({ ratio: p.ratio, tpl: p.tpl, qi: p.qi, head: p.head, strokes: p.strokes, texts: p.texts })) };
+      await out.attach(new TextEncoder().encode(JSON.stringify(pack)), 'yeobaek.ybq', { mimeType: 'application/json', description: '여백 ' + (d.type === 'quiz' ? '문제지' : '노트'), creationDate: new Date(), modificationDate: new Date() });
+    }
     out.setTitle(d.title || '여백'); out.setCreator('여백 노트'); out.setProducer('여백 노트');
     const bytes = await out.save();
     const name = (d.title || '여백').replace(/[\\/:*?"<>|]+/g, ' ').trim() + '.pdf';

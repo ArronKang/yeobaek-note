@@ -293,6 +293,33 @@ Y.openNote = function (n, coverElm) {
     setTimeout(() => Y.toast('문제나 답칸을 꾹 누르면 정답과 풀이가 떠올라요', { ms: 4000 }), 900);
   }
 };
+/* 여백에서 내보낸 PDF: 안에 첨부된 원본(yeobaek.ybq)으로 문제지·노트를 그대로 되살림 */
+async function fromPack(doc) {
+  let att = null;
+  try { att = await doc.pdf.getAttachments(); } catch (e) { return null; }
+  const a = att && (att['yeobaek.ybq'] || Object.values(att).find(x => x && x.filename === 'yeobaek.ybq'));
+  if (!a || !a.content) return null;
+  let pack; try { pack = JSON.parse(new TextDecoder().decode(a.content)); } catch (e) { return null; }
+  if (!pack || pack.yeobaek !== 1 || !Array.isArray(pack.pages)) return null;
+  const folder = (L.view.startsWith && L.view.startsWith('f:')) ? L.view.slice(2) : null;
+  const pages = pack.pages.map(p => ({ ratio: p.ratio || Y.RATIO, tpl: p.tpl || 'lined', strokes: p.strokes || [], texts: p.texts || [], ...(p.qi ? { qi: p.qi, head: !!p.head } : {}) }));
+  if (pack.kind === 'quiz' && pack.ybq) {
+    const meta = Y.addQuiz(Y.parseQuiz(JSON.stringify(pack.ybq)), { folder });
+    meta.title = pack.title || meta.title; meta.pageCount = pages.length; Y.saveLib();
+    Y.store.set('yeobaek.v2.n.' + meta.id, pack.lv ? { pages, lv: pack.lv } : { pages });
+    if (pack.qs) Y.store.set('yeobaek.v2.qs.' + meta.id, pack.qs);
+    if (!folder) L.view = 'quiz';
+    return meta;
+  }
+  if (pack.kind === 'note') {
+    const now = Date.now(), id = Y.uid();
+    const meta = { id, title: pack.title || '노트', cover: 'slate', folder, fav: false, trashed: false, created: now, updated: now, pageCount: pages.length };
+    Y.lib.notes.unshift(meta); Y.saveLib();
+    Y.store.set('yeobaek.v2.n.' + id, { pages });
+    return meta;
+  }
+  return null;
+}
 $('#libfile').addEventListener('change', e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   const isQuiz = /\.ybq$/i.test(f.name) || /json/.test(f.type);
@@ -309,7 +336,12 @@ $('#libfile').addEventListener('change', e => {
   head.then(sig => {
     if (sig.trim().startsWith('{')) return asQuiz().catch(() => Y.toast('문제지 파일을 읽을 수 없어요', { ms: 4500 }));
     Y.toast('PDF를 여는 중…', { ms: 8000 });
-    Y.openPdfFile(f).then(doc => { Y.$('.toast') && Y.$('.toast').remove(); Y.enterEditor({ doc }); })
+    Y.openPdfFile(f).then(async doc => {
+      Y.$('.toast') && Y.$('.toast').remove();
+      const meta = await fromPack(doc);
+      if (meta) { renderSide(); renderBody(); Y.toast(meta.kind === 'quiz' ? '여백 문제지로 열었어요' : '여백 노트로 열었어요'); setTimeout(() => Y.openNote(meta), 150); return; }
+      Y.enterEditor({ doc });
+    })
       .catch(err => Y.toast(err && err.message === 'engine' ? 'PDF 엔진을 불러오지 못했어요. 인터넷 연결을 확인하세요' : '이 파일은 열 수 없어요. PDF나 .ybq 문제지를 선택하세요', { ms: 5000 }));
   });
 });
