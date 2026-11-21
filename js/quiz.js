@@ -273,8 +273,7 @@ function openCard(qb, doc, i, at, pt, press) {
   const g = doc.qs.grade[i];
   const act = (v, icon, label) => h('button', { type: 'button', class: 'qc-act ' + v + (g === v ? ' on' : ''), 'data-v': v, html: Y.ic(icon) + '<span>' + label + '</span>', onclick: () => setGrade(doc, i, v) });
   card.append(h('div', { class: 'qc-acts' }, act('clear', 'reset', '답안 제거'), act('o', 'check', '맞았어요'), act('x', 'close', '틀렸어요')));
-  card.append(h('div', { class: 'qc-top' }, h('span', { class: 'qc-k', text: p.no + '번 정답' }),
-    h('button', { type: 'button', class: 'qc-x', 'aria-label': '닫기', html: Y.ic('close'), onclick: closeCard })));
+  card.append(h('div', { class: 'qc-top' }, h('span', { class: 'qc-k', text: p.no + '번 정답' })));
   const big = p.type === 'choice' ? (CIRC[+p.answer - 1] || p.answer) : p.answer;
   card.append(h('div', { class: 'qc-ans', html: p.type === 'choice' ? '<span class="qc-c">' + big + '</span>' + (p.choices[+p.answer - 1] != null ? '<span class="qc-cv">' + tex(p.choices[+p.answer - 1]) + '</span>' : '') : tex(String(big)) }));
   if (p.type === 'choice') {
@@ -330,8 +329,8 @@ window.addEventListener('pointermove', e => {
   if (!drag.card.isConnected) { endDrag(false); return; }
   if (drag.hover) {
     if (e.pointerType !== 'pen') return;
-    // 펜이 떠 있는 동안 계속 들어오는 움직임: 끊기면(멀리 듦) 닫힘
-    clearTimeout(drag.t); drag.t = setTimeout(() => endDrag(true), 900);
+    // 펜이 떠 있음이 확인되면 기다림 타이머를 끔. 펜을 그대로 두어도 카드는 남음
+    if (!drag.seen) { drag.seen = true; clearTimeout(drag.t); }
   }
   setHot(hitAct(e.clientX, e.clientY));
 }, { capture: true, passive: true });
@@ -342,7 +341,7 @@ window.addEventListener('pointerup', e => {
   if (a) { endDrag(false); a.click(); return; }
   if (e.pointerType === 'pen') {
     // 펜 호버 단계로: 곧 호버 움직임이 안 오면(호버 없는 기기·멀리 듦) 닫힘
-    drag.hover = true; clearTimeout(drag.t); drag.t = setTimeout(() => endDrag(true), 500);
+    drag.hover = true; clearTimeout(drag.t); drag.t = setTimeout(() => { if (drag && !drag.seen) endDrag(true); }, 700);
     return;
   }
   endDrag(true);
@@ -380,6 +379,15 @@ Y.quizLongPress = function (pg, x, y) {
 };
 
 /* ---------- 입력 ---------- */
+/* 톡 치기: 필기 층이 위에 있어서 엔진이 짧은 톡을 여기로 넘겨 줌 (보기 고르기, 번호 별표) */
+Y.quizTap = function (pg, x, y) {
+  const doc = pg.pane && pg.pane.doc; if (!doc || doc.type !== 'quiz' || !pg.paper) return false;
+  const near = (sel, pad) => [...pg.paper.querySelectorAll(sel)].find(el => { const r = el.getBoundingClientRect(); return x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad; });
+  const el = near('.qch', 3) || near('.qno', 6);
+  if (!el) return false;
+  onClick({ target: el, stopPropagation() {} }, doc);
+  return true;
+};
 function onClick(e, doc) {
   const ch = e.target.closest('.qch'), no = e.target.closest('.qno');
   if (no) {

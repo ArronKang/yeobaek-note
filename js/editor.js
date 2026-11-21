@@ -426,17 +426,24 @@ Y.onActive = function (P) {
 };
 
 /* =============== 상단 아이콘, 핸들, 제목 =============== */
-$('#ic-share').innerHTML = Y.ic('share'); $('#ic-settings').innerHTML = Y.ic('settings'); $('#ic-full').innerHTML = Y.ic('collapse');
+$('#ic-share').innerHTML = Y.ic('share'); $('#ic-more').innerHTML = Y.ic('more'); $('#ic-more2').innerHTML = Y.ic('more');
 $('#ic-back').innerHTML = Y.ic('back'); $('#ic-search').innerHTML = Y.ic('search');
 $('#btn-back').addEventListener('click', Y.closeEditor);
 $('#btn-share').addEventListener('click', () => Y.exportPdf());
-$('#btn-settings').addEventListener('click', () => Y.openSettings());
+// ⋯ 메뉴: 설정, 다크 모드, 도구 막대 숨기기
+$('#btn-more').addEventListener('click', e => {
+  const btn = e.currentTarget, list = h('div', { class: 'plist' });
+  const item = (icon, label, fn, on) => list.append(h('button', { type: 'button', class: 'pitem' + (on ? ' on' : ''), html: Y.ic(icon) + '<span>' + label + '</span>', onclick: () => { Y.closePopover(); fn(); } }));
+  item('collapse', '도구 막대 숨기기', toggleChrome);
+  item('moon', '다크 모드', () => { Y.settings.dark = Y.isDark() ? 'off' : 'on'; Y.saveSettings(); Y.applyPaper(); redrawAllPages(); renderTools(false); }, Y.isDark());
+  item('settings', '설정', () => Y.openSettings());
+  Y.popover(btn, list, { width: 220, align: 'right' });
+});
 function toggleChrome() {
   E.collapsed = !E.collapsed; Y.closePopover();
   $('#editor').classList.toggle('collapsed', E.collapsed); measureChrome();
   setTimeout(() => Y.panes.forEach(P => P.zoom === 'fit' && Y.layout(P)), 270);
 }
-$('#btn-full').addEventListener('click', toggleChrome);
 $('#handle').addEventListener('click', toggleChrome);
 $('#title').addEventListener('input', e => { const P = Y.active; if (P && P.doc) { P.doc.title = e.target.value; Y.queueSave(P); } });
 $('#title').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });

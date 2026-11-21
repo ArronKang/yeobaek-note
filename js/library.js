@@ -245,7 +245,8 @@ function newNoteModal() {
     covers.innerHTML = ''; tpls.innerHTML = '';
     Y.COVERS.forEach(c => covers.append(h('button', { type: 'button', class: 'cdot' + (st.cover === c.id ? ' on' : ''), style: '--c:' + c.c, role: 'radio', 'aria-checked': st.cover === c.id ? 'true' : 'false', 'aria-label': c.name, onclick: () => { st.cover = c.id; paint(); prev(); } })));
     Y.TEMPLATES.forEach(t => tpls.append(h('button', { type: 'button', class: 'tpick' + (st.tpl === t[0] ? ' on' : ''), role: 'radio', 'aria-checked': st.tpl === t[0] ? 'true' : 'false', onclick: () => { st.tpl = t[0]; paint(); } },
-      h('div', { class: 'paper tpl-' + t[0] + ' tmini', style: '--dp:.1px' }, t[0] === 'planner' || t[0] === 'recipe' ? h('span', { class: 'tmark', text: t[0] === 'planner' ? 'WEEK' : 'RECIPE' }) : null), h('span', { text: t[1] }))));
+      // 미리보기: 줄·모눈·점은 무늬가 보이게 크게, 플래너·레시피는 실제 양식을 줄여서
+      (() => { const mk = t[0] === 'planner' || t[0] === 'recipe'; const d = h('div', { class: 'paper tpl-' + t[0] + ' tmini', style: '--dp:' + (mk ? '.125px' : '.32px') }); if (mk) d.innerHTML = Y.tplHTML(t[0]); return d; })(), h('span', { text: t[1] }))));
   };
   const pv = h('div', { class: 'npprev' });
   const prev = () => { pv.innerHTML = ''; pv.append(coverEl({ title: inp.value || '새 노트', cover: st.cover })); };

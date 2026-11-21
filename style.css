@@ -1104,3 +1104,48 @@ html[data-theme="dark"] #chrome{background:rgba(52,58,64,.70)!important;box-shad
   .qmark.anim path,.qscore.anim path,.qch.correct.stamp .qcn::after,.page.born{animation:none!important}
 }
 #editor.pulling #chip{opacity:0!important}
+
+/* 문제지도 PDF처럼: 글자는 종이에 인쇄된 것, 필기는 그 위 (펜이 글자 뒤로 숨지 않음)
+   보기·번호는 직접 눌리지 않고, 엔진이 짧은 톡을 받아 Y.quizTap으로 넘김 */
+.qlayer{z-index:1!important}
+.qlayer .qch,.qlayer .qno,.qlayer .qbtn{pointer-events:none!important}
+.paper .ink{z-index:2}
+.paper canvas.pv{z-index:3}
+.tlayer{z-index:3}
+.qcard{z-index:6}
+
+/* 펜꽂이: 펜들이 아래 테두리에 반쯤 꽂혀 있고, 고른 펜만 쑥 올라옴
+   (버튼처럼 칠해지지 않고 물건이 움직이는 것으로 선택을 보여 줌) */
+#tray{align-self:stretch;height:auto;align-items:flex-end;overflow:hidden;gap:0;padding:0 2px;margin-bottom:-1px}
+.pen{width:34px;height:44px;border-radius:0;display:flex;align-items:flex-end;justify-content:center;background:none!important}
+.pen::after,.pen.sel::after{display:none!important}
+.pen svg{width:30px;height:30px;transform:translateY(13px)!important;transition:transform .38s var(--spring)!important}
+.pen.sel svg{transform:translateY(-3px)!important}
+@media (hover:hover){.pen:not(.sel):hover svg{transform:translateY(7px)!important}}
+.pen:active svg{transition-duration:.12s!important}
+.pen:active{transform:none!important}
+.penplus{align-self:center;margin-left:6px}
+
+/* 가운데 위 손잡이는 없앰. 도구 막대를 숨겼을 때만 오른쪽 위에 작은 유리 ⋯ (누르면 다시 내려옴) */
+#handle{display:none!important}
+#editor.collapsed #handle{display:grid!important;position:absolute;left:auto;right:12px;top:max(10px,env(safe-area-inset-top));transform:none!important;
+  width:40px;height:40px;padding:0;border-radius:50%;place-items:center;color:var(--snow);
+  background:rgba(248,249,250,.72)!important;-webkit-backdrop-filter:blur(22px) saturate(1.6);backdrop-filter:blur(22px) saturate(1.6);
+  box-shadow:inset 0 .5px 0 rgba(255,255,255,.9),0 0 0 .5px rgba(33,37,41,.08),0 4px 16px rgba(33,37,41,.12)}
+html[data-theme="dark"] #editor.collapsed #handle{background:rgba(52,58,64,.7)!important;box-shadow:inset 0 .5px 0 rgba(255,255,255,.14),0 0 0 .5px rgba(248,249,250,.1),0 4px 16px rgba(0,0,0,.35)}
+#handle .ic{width:20px;height:20px}
+.pitem .ic{color:var(--ink2)}
+
+/* 문서 탭: 책갈피처럼 나란히, 고른 탭만 진하게 */
+#doctabs{display:flex;align-items:center;gap:2px;min-width:0;overflow-x:auto;scrollbar-width:none;margin-left:2px}
+#doctabs::-webkit-scrollbar{display:none}
+.dtab{flex:none;max-width:132px;height:30px;padding:0 12px;border-radius:999px;font-size:12.5px;font-weight:500;color:var(--ink2);white-space:nowrap;
+  transition:background-color .15s ease,color .15s ease,transform .55s cubic-bezier(.5,0,.75,0)!important}
+.dtab span{display:block;overflow:hidden;text-overflow:ellipsis}
+.dtab.on{color:var(--snow);background:var(--fill2);font-weight:600}
+#doctabs .dtab.pressing{transform:scale(.6)!important;opacity:.5}
+.dtab.add{width:30px;padding:0;display:grid;place-items:center}
+.dtab.add .ic{width:16px;height:16px}
+.tpick .tpl-lined{background-size:auto!important}
+.tmini .tpl{padding:calc(30 * var(--dp)) calc(28 * var(--dp)) calc(24 * var(--dp)) calc(30 * var(--dp))}
+.tmini .tl-head h3,.tmini .lb,.tmini .tlink{visibility:hidden}

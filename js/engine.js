@@ -641,7 +641,7 @@ function onDown(e, pg) {
     if (!Y.settings.finger) {
       stopGlide(P);
       if (P.pinch) return;
-      P.scrolling = { id: e.pointerId, x0: e.clientX, y0: e.clientY, l0: P.scroll.scrollLeft, t0: P.scroll.scrollTop, hist: [[e.clientX, e.clientY, performance.now()]] };
+      P.scrolling = { id: e.pointerId, x0: e.clientX, y0: e.clientY, ts: performance.now(), l0: P.scroll.scrollLeft, t0: P.scroll.scrollTop, hist: [[e.clientX, e.clientY, performance.now()]] };
       startLP(P, e, pg);
       try { pg.ink.setPointerCapture(e.pointerId); } catch (_) {}; return;
     }
@@ -654,7 +654,7 @@ function onDown(e, pg) {
   const pt = norm(e, pg);
   if (mode === 'text') { newText(pg, pt); return; }
   try { pg.ink.setPointerCapture(e.pointerId); } catch (_) {};
-  const c = P.cur = { pg, id: e.pointerId, mode, removed: [], added: [], temp: mode !== Y.mode, touch: e.pointerType === 'touch' };
+  const c = P.cur = { pg, id: e.pointerId, mode, removed: [], added: [], temp: mode !== Y.mode, touch: e.pointerType === 'touch', t0: performance.now(), x0: e.clientX, y0: e.clientY };
   if (mode === 'eraser') { eraseAt(P, pt); return; }
   if (mode === 'lasso') {
     const sel = P.sel;
@@ -749,6 +749,10 @@ function onUp(e) {
   if (P.scrolling && P.scrolling.id === e.pointerId) {
     const S = P.scrolling; P.scrolling = null;
     if (S.raf) { cancelAnimationFrame(S.raf); S.raf = 0; }
+    if (e.type !== 'pointercancel' && S.ts && performance.now() - S.ts < 350 && Math.hypot(e.clientX - S.x0, e.clientY - S.y0) < 10 && P.doc && P.doc.type === 'quiz' && Y.quizTap) {
+      const pg = P.doc.pages.find(q => q.paper && q.paper.contains(document.elementFromPoint(e.clientX, e.clientY))) || P.doc.pages.find(q => { const r = q.el.getBoundingClientRect(); return e.clientY >= r.top && e.clientY <= r.bottom; });
+      if (pg && Y.quizTap(pg, e.clientX, e.clientY)) return;
+    }
     if (P.pullRaw) { Y.pullRelease(P); return; }
     const now = performance.now(), hs = S.hist.filter(q => now - q[2] < 100);
     if (hs.length >= 2 && e.type !== 'pointercancel') {
@@ -794,6 +798,9 @@ function onUp(e) {
     pg.strokes.splice(i < 0 ? pg.strokes.length : i, i < 0 ? 0 : 1, ...rep); pg._snap = null;
     redraw(pg); Y.haptic(6);
     pushHist(P, pg, () => rep.forEach(s => { const k = pg.strokes.indexOf(s); if (k >= 0) pg.strokes.splice(k, 1); }), () => rep.forEach(s => pg.strokes.push(s)));
+  } else if (st && P.doc.type === 'quiz' && performance.now() - c.t0 < 350 && Math.hypot(e.clientX - c.x0, e.clientY - c.y0) < 8 && Y.quizTap && Y.quizTap(pg, e.clientX, e.clientY)) {
+    // 보기 위를 톡: 점은 지우고 고르기로
+    const k = pg.strokes.indexOf(st); if (k >= 0) pg.strokes.splice(k, 1); pg._snap = null; redraw(pg);
   } else if (st) {
     delete st._live; pg._snap = null;
     redraw(pg);
