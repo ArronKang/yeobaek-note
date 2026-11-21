@@ -230,6 +230,7 @@ function refresh(doc, i, anim) {
 }
 
 /* ---------- 정답·풀이 카드 ---------- */
+Y.closeCard = () => { if (!$('.qcard')) return false; closeCard(); return true; };
 function closeCard() {
   const c = $('.qcard'); if (!c) return;
   c.classList.remove('in'); setTimeout(() => c.remove(), 220);

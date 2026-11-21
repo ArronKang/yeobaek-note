@@ -46,7 +46,7 @@
 
 | 파일 | 역할 |
 |---|---|
-| `index.html` | 화면 뼈대. 스크립트 순서: katex → pdf.js → core → templates → engine → pdf → editor → quiz → samples → library |
+| `index.html` | 화면 뼈대. 스크립트 순서: katex → pdf.js → core → templates → engine → pdf → editor → quiz → samples → library → native |
 | `style.css` | 전체 스타일. 회색 토큰, 라이트/다크(`html[data-theme]`), 문제지 스타일, 맨 아래에 블러 애니메이션·고정 페이지·밀어서 고르기 메뉴 |
 | `js/core.js` | 공통 도구(`Y.h`, `Y.$`, `Y.ic` 아이콘, `Y.store`), 설정, 펜 기본값, 표지 색 |
 | `js/engine.js` | 필기 엔진. 포인터 이벤트, 펜 압력, 손바닥 무시, 손가락 스크롤 관성, 핀치 줌, 꾹 누르기(`startLP`) |
@@ -54,6 +54,7 @@
 | `js/library.js` | 라이브러리 화면, 가져오기(`#libfile`: PDF·.ybq), 예제 문제지 넣기 |
 | `js/quiz.js` | .ybq 파싱·페이지 나누기·문항 그리기·정답 카드·채점 |
 | `js/samples.js` | 예제 문제지(영어·국어·통합과학·한국사). 수학 예제는 `quiz.js`의 `Y.QUIZ_SAMPLE` |
+| `js/native.js` | 웹 흔적 없애기: 안드로이드 뒤로가기(팝오버→정답 카드→모달→편집 화면→사이드바 순으로 닫기), 꾹 누름 메뉴·끌기 차단, 편집 중 화면 꺼짐 방지(Wake Lock) |
 | `js/pdf.js`, `js/templates.js` | PDF 렌더링, 노트 종이 템플릿 |
 
 ### 저장 키 (localStorage)
@@ -137,6 +138,8 @@ Playwright(파이썬)로 800×1280, device_scale_factor 2 화면에서 확인해
 - [ ] 오프라인 첫 실행 때 Google Fonts가 없으면 다른 글꼴로 재어짐 → Noto Sans KR을 `vendor/`에 넣는 것 검토
 - [ ] S Pen 실제 필기감(압력·끊김) 추가 조정 — `engine.js`의 `norm`, `isPalm`, `segWidth`
 - 아이디어(사용자가 아직 고르지 않음): 문제지에 그림·표 넣기, 틀린 문제만 모아 다시 풀기 문제지, 풀이 타이머
+
+- 펜 반응: `engine.js`가 저지연 캔버스(`desynchronized`)를 쓰고, `getPredictedEvents`로 펜 끝 앞을 `.pv` 캔버스에 미리 그려요(다음 움직임에서 지움)
 
 ## 7. 알려진 제약
 

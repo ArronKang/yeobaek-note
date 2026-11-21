@@ -39,7 +39,7 @@ html[data-paper="dark"]{--paper:var(--g7);--paper-line:var(--g6);--paper-line2:#
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--snow);font-family:var(--font);font-size:15px;font-weight:400;-webkit-text-size-adjust:100%;
-  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none;overflow:hidden}
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;overflow:hidden}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .2s var(--ease),background-color .2s,color .2s,opacity .2s}
 button:active:not(:disabled):not(.pen):not(#handle):not(.tab){transform:scale(.96);transition-duration:.08s}
 button:disabled{cursor:default}
@@ -309,6 +309,7 @@ html[data-paper="dark"] .prevbox{background:#fff}
 html[data-paper="dark"] .paper::after{opacity:.12}
 .paper canvas{position:absolute;left:0;top:0;width:100%;height:100%}
 .ink{z-index:2;touch-action:none;cursor:crosshair}
+.paper canvas.pv{z-index:2;pointer-events:none}
 .pdfbg{z-index:0}
 .tlayer{position:absolute;inset:0;z-index:3;pointer-events:none}
 body.m-text .tbox{pointer-events:auto}
@@ -618,3 +619,7 @@ html,body{touch-action:manipulation}
 .qc-act.o.hot{background:#2f9e44;border-color:#2f9e44}.qc-act.x.hot{background:#e03131;border-color:#e03131}
 .qc-hint{order:-1;font-size:.78em;color:var(--paper-label);margin:-.2em 0 .5em}
 .qcard.up .qc-hint{order:98;margin:.5em 0 -.2em}
+
+/* 웹 흔적 없애기: 이미지 끌기·꾹 누름 메뉴, 손가락 탭 때 포커스 테두리 */
+img,svg,canvas{-webkit-user-drag:none;-webkit-touch-callout:none}
+:focus:not(:focus-visible){outline:none}

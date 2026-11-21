@@ -185,6 +185,7 @@ Y.toast = function (msg, opt) {
 };
 
 /* ---------- 모달 / 확인 ---------- */
+Y._modals = [];
 Y.modal = function (content, opt) {
   opt = opt || {};
   Y.closePopover();
@@ -194,6 +195,7 @@ Y.modal = function (content, opt) {
   Y.$('#overlay').append(back);
   requestAnimationFrame(() => back.classList.add('in'));
   const close = () => {
+    const i = Y._modals.indexOf(close); if (i < 0) return; Y._modals.splice(i, 1);
     document.removeEventListener('keydown', key);
     back.classList.remove('in'); setTimeout(() => back.remove(), 180);
     opt.onClose && opt.onClose();
@@ -201,6 +203,7 @@ Y.modal = function (content, opt) {
   const key = e => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', key);
   back.addEventListener('pointerdown', e => { if (e.target === back) close(); });
+  Y._modals.push(close);
   return { close, box };
 };
 Y.confirm = function (o) {

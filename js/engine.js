@@ -82,8 +82,12 @@ function createPage(P, pg, before) {
   else if (pg.bg) pg.bg = null;
   if (P.doc.type === 'note') paper.append(h('div', { class: 'holes' }));
   pg.ink = h('canvas', { class: 'ink' });
+  // 저지연 캔버스: 브라우저 합성 단계를 건너뛰어 펜 끝을 더 빨리 그림 (첫 getContext에서만 지정 가능)
+  try { pg.ink.getContext('2d', { desynchronized: true }); } catch (e) {}
+  // 예측 획: 펜이 갈 곳을 미리 그려 끝이 따라붙는 느낌을 줄임. 다음 움직임에서 지움
+  pg.pv = h('canvas', { class: 'pv', 'aria-hidden': 'true' });
   pg.tl = h('div', { class: 'tlayer' });
-  paper.append(pg.ink, pg.tl);
+  paper.append(pg.ink, pg.pv, pg.tl);
   if (P.doc.type === 'quiz' && Y.quizLayer) paper.append(Y.quizLayer(P.doc, pg));
   wrap.append(paper);
   if (P.doc.type === 'note') wrap.append(h('div', { class: 'rings' }));
@@ -123,13 +127,14 @@ function setSizes(pg) {
     const rs = Math.min(Y.DPR, 3000 / W, 4096 / H);
     pg.rs = rs;
     pg.ink.width = Math.round(W * rs); pg.ink.height = Math.round(H * rs);
+    pg.pv.width = pg.ink.width; pg.pv.height = pg.ink.height;
     redraw(pg); layoutTexts(pg);
   }
 }
 function allocate(pg) { setSizes(pg); if (pg.pane.doc.type === 'pdf') Y.renderPdf(pg); }
 function free(pg) {
   if (pg.task) { try { pg.task.cancel(); } catch (e) {} pg.task = null; }
-  pg.token++; pg.ink.width = 0; pg.ink.height = 0;
+  pg.token++; pg.ink.width = 0; pg.ink.height = 0; pg.pv.width = 0; pg.pv.height = 0;
   if (pg.bg) { pg.bg.width = 0; pg.bg.height = 0; pg.el.classList.add('loading'); }
 }
 Y.setSizes = setSizes;
@@ -274,7 +279,7 @@ function bboxOf(list) {
 function redraw(pg) {
   if (!pg.active || !pg.ink.width) return;
   const ctx = pg.ink.getContext('2d'), K = pg.ink.width, P = pg.pane;
-  ctx.clearRect(0, 0, K, pg.ink.height);
+  ctx.clearRect(0, 0, K, pg.ink.height); clearPred(pg);
   const sr = Y.searchRects && Y.searchRects(pg);
   if (sr) {
     sr.rects.forEach((r, i) => {
@@ -333,6 +338,24 @@ function livePen(pg, st) {
   ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = strokeColor(st);
   if (n >= 2) drawSeg(ctx, st, n - 2);
   ctx.restore();
+}
+function clearPred(pg) {
+  if (pg && pg._pred) { pg._pred = false; pg.pv.getContext('2d').clearRect(0, 0, pg.pv.width, pg.pv.height); }
+}
+function drawPred(pg, st, e, rect) {
+  const ps = e.getPredictedEvents ? e.getPredictedEvents() : [];
+  clearPred(pg);
+  if (!ps.length || st.p.length < 2) return;
+  const last = st.p[st.p.length - 1], pts = st.p.slice(-2);
+  // 너무 멀리 앞서 그리면 오히려 어색해서 짧게만
+  for (let i = 0; i < Math.min(2, ps.length); i++) {
+    const q = norm(ps[i], pg, rect); q[2] = last[2];
+    if (Math.hypot(q[0] - last[0], q[1] - last[1]) > 0.03) break;
+    pts.push(q);
+  }
+  if (pts.length < 3) return;
+  drawStroke(pg.pv.getContext('2d'), Object.assign({}, st, { p: pts, _live: true }));
+  pg._pred = true;
 }
 function norm(e, pg, r) {
   r = r || pg.ink.getBoundingClientRect();
@@ -678,6 +701,7 @@ function onMove(e) {
     st.p.push(pt); if (st.t === 'pen') livePen(pg, st);
   });
   if (st.t === 'hl') liveHL(pg, st);
+  else if (st.t === 'pen' && e.pointerType === 'pen') drawPred(pg, st, e, rect);
   clearTimeout(c.snapT);
   if (Y.settings.snap && st.t === 'pen' && st.p.length > 8) {
     c.snapT = setTimeout(() => {
@@ -701,7 +725,7 @@ function onUp(e) {
     return;
   }
   const c = P.cur, pg = c.pg, st = c.st; clearTimeout(c.snapT);
-  P.cur = null;
+  P.cur = null; clearPred(pg);
   if (c.move) {
     const dx = c.move.dx, dy = c.move.dy, list = P.sel.strokes;
     if (Math.abs(dx) + Math.abs(dy) > 0.0005) {

@@ -326,6 +326,11 @@ if (!Y.store.get('yeobaek.v4.seeded', false) && Y.QUIZ_SAMPLES) {
 Y.drawer = function (open) { $('#lib').classList.toggle('drawer', !!open); };
 $('#scrim').addEventListener('click', () => Y.drawer(false));
 
+Y.libBack = function () {
+  if ($('#lib').classList.contains('drawer')) { Y.drawer(false); return true; }
+  if (L.selecting) { exitSel(); return true; }
+  return false;
+};
 Y.libRefresh = function () { exitSelQuiet(); renderSide(); renderBody(); };
 function exitSelQuiet() { L.selecting = false; L.sel.clear(); }
 renderSide(); renderBody();
