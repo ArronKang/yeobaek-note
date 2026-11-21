@@ -61,8 +61,8 @@ function blockHTML(spec, idx, lv) {
 }
 const qcount = spec => spec.problems.filter(p => p.type !== 'passage').length;
 function headHTML(spec) {
-  return '<div class="qhdr">' + (spec.subject ? '<div class="qsub">' + esc(spec.subject) + '</div>' : '') +
-    '<h2 class="qtitle">' + esc(spec.title) + '</h2>' +
+  return '<div class="qhdr">' + (spec.subject ? '<div class="qsub">' + esc(Y.clean(spec.subject)) + '</div>' : '') +
+    '<h2 class="qtitle">' + esc(Y.clean(spec.title)) + '</h2>' +
     '<div class="qmeta"><span>' + qcount(spec) + '문항</span></div>' +
     '<div class="qscore" aria-live="polite"></div></div>';
 }
@@ -94,9 +94,8 @@ function allText(spec) {
 }
 Y.quizFonts = function (spec) {
   if (!document.fonts || !document.fonts.load) return Promise.resolve();
-  const txt = allText(spec), fam = '"Noto Sans KR"';
-  const jobs = ['400', '500', '600'].map(w => document.fonts.load(w + ' 16px ' + fam, txt).catch(() => {}));
-  jobs.push(document.fonts.load('600 16px "Barlow Condensed"', '0123456789/').catch(() => {}));
+  const txt = allText(spec), fam = '"Pretendard Variable"';
+  const jobs = ['400', '500', '600', '700'].map(w => document.fonts.load(w + ' 16px ' + fam, txt).catch(() => {}));
   const all = Promise.all(jobs).then(() => document.fonts.ready);
   return Promise.race([all, new Promise(r => setTimeout(r, 4000))]);
 };
@@ -271,9 +270,9 @@ function openCard(qb, doc, i, at, pt, press) {
   card.append(h('div', { class: 'qc-ans', html: p.type === 'choice' ? '<span class="qc-c">' + big + '</span>' + (p.choices[+p.answer - 1] != null ? '<span class="qc-cv">' + tex(p.choices[+p.answer - 1]) + '</span>' : '') : tex(String(big)) }));
   if (p.type === 'choice') {
     const sel = doc.qs.sel[i];
-    card.append(h('div', { class: 'qc-res ' + (sel ? (isRight(p, sel) ? 'o' : 'x') : ''), text: sel ? (isRight(p, sel) ? '맞았어요' : '내 답 ' + CIRC[sel - 1] + ' · 틀렸어요') : '보기를 고르지 않았어요' }));
+    card.append(h('div', { class: 'qc-res ' + (sel ? (isRight(p, sel) ? 'o' : 'x') : ''), text: sel ? (isRight(p, sel) ? '맞았어요' : '내 답 ' + CIRC[sel - 1]) : '' }));
   } else {
-    card.append(h('div', { class: 'qc-res', text: '내 답과 비교해서 맞았어요 / 틀렸어요를 고르세요' }));
+
   }
   if (p.solution) card.append(h('div', { class: 'qc-solh', text: '풀이' }), h('div', { class: 'qc-sol', html: tex(p.solution) }));
   paper.append(card);
@@ -376,7 +375,7 @@ function onClick(e, doc) {
     const i = +no.closest('.qb').dataset.qi; doc.qs.star = doc.qs.star || {};
     if (doc.qs.star[i]) delete doc.qs.star[i]; else doc.qs.star[i] = 1;
     saveState(doc); refresh(doc, i, false); Y.haptic(8);
-    Y.toast(doc.qs.star[i] ? '다시 볼 문제로 표시했어요' : '표시를 지웠어요', { ms: 1400 });
+
     return;
   }
   if (!ch) return;
@@ -407,8 +406,8 @@ Y.gradeAll = function (doc) {
   });
   saveState(doc); doc.quiz.problems.forEach((p, i) => refresh(doc, i, true));
   const sc = score(doc);
-  if (!n && !sc.graded) Y.toast('고른 보기가 없어요. 보기를 먼저 골라 주세요');
-  else Y.toast(sc.right + ' / ' + sc.total + ' 맞았어요' + (sc.graded < sc.total ? ' · ' + (sc.total - sc.graded) + '문항은 아직 채점 전' : ''), { ms: 3500 });
+  if (!n && !sc.graded) Y.toast('고른 보기가 없어요');
+  else Y.toast(sc.right + ' / ' + sc.total + (''), { ms: 3500 });
   Y.haptic(15);
 };
 Y.resetQuiz = function (doc) {
@@ -433,20 +432,20 @@ Y.answerSheet = function (anchor, doc) {
     });
     grid.append(cell);
   });
-  Y.popover(anchor, h('div', {}, h('div', { class: 'ptitle', text: '정답표 · 한 번 누르면 정답, 두 번 누르면 이동' }), grid), { width: 300 });
+  Y.popover(anchor, h('div', {}, h('div', { class: 'ptitle', text: '정답표' }), grid), { width: 300 });
 };
 
 Y.quizFocus = function (doc, on) {
   doc.qs.focus = on == null ? !doc.qs.focus : !!on; saveState(doc);
   Y.$$('.qlayer[data-doc="' + doc.id + '"]').forEach(l => l.classList.toggle('focus', doc.qs.focus));
-  if (on == null) Y.toast(doc.qs.focus ? '맞은 문제를 흐리게 했어요. 틀린 문제와 별표 문제에 집중하세요' : '모든 문제를 다시 보여줘요', { ms: 2200 });
+
 };
 
 /* ---------- 예제 문제지 ---------- */
 Y.QUIZ_SAMPLE = {
   ybq: 1,
-  title: '수학 Ⅰ·Ⅱ 맛보기',
-  subject: '예제 문제지 · 고2 수학',
+  title: '수학 Ⅰ Ⅱ 맛보기',
+  subject: '예제 문제지 고2 수학',
   problems: [
     { type: 'choice', points: 2, q: '$\\sqrt[3]{8}\\times 4^{\\frac{1}{2}}$ 의 값은?', choices: ['$2$', '$4$', '$6$', '$8$', '$16$'], answer: 2,
       solution: '$\\sqrt[3]{8}=2$, $\\;4^{\\frac{1}{2}}=\\sqrt{4}=2$ 이므로\n$$\\sqrt[3]{8}\\times 4^{\\frac{1}{2}} = 2\\times 2 = 4$$' },

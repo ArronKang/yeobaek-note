@@ -4,7 +4,7 @@
 const h = Y.h, $ = Y.$;
 const E = Y.E = { tab: 'draw', sidebar: false, grid: false, collapsed: false, ratio: 0.5, vertical: false, primary: null };
 const TABS = [['home', 'Home', '홈'], ['insert', 'Insert', '삽입'], ['draw', 'Draw', '필기'], ['view', 'View', '보기']];
-const later = () => Y.toast('이 기능은 다음 단계에서 추가할게요');
+const later = () => Y.toast('준비 중이에요');
 const MODE_NAME = { pen: '펜', eraser: '지우개' };
 
 /* =============== 들어가기 / 나가기 =============== */
@@ -20,16 +20,8 @@ Y.enterEditor = function (o) {
   Y.active = P; P.root.classList.add('active');
   Y.openDoc(P, o.doc);
   measureChrome(); renderAll();
-  const reveal = () => { ed.classList.add('shown'); setTimeout(() => { $('#lib').hidden = true; }, 220); };
-  if (o.rect && !Y.reduced.matches) {
-    const r = o.rect, W = innerWidth, H = innerHeight, x = h('div', { class: 'xfer', style: 'background:' + (o.color || '#495057') + ';width:' + W + 'px;height:' + H + 'px' });
-    $('#overlay').append(x);
-    const from = 'translate(' + r.left + 'px,' + r.top + 'px) scale(' + (r.width / W) + ',' + (r.height / H) + ')';
-    const a = x.animate([{ transform: from, borderRadius: '24px', opacity: 1, filter: 'blur(10px)' }, { transform: 'none', borderRadius: '0px', opacity: 1, filter: 'blur(0px)' }],
-      { duration: 460, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' });
-    setTimeout(reveal, 300);
-    a.onfinish = () => { x.animate([{ opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(14px)' }], { duration: 260, easing: 'ease-out', fill: 'forwards' }).onfinish = () => x.remove(); };
-  } else { ed.classList.add('fade'); reveal(); }
+  const reveal = () => { requestAnimationFrame(() => ed.classList.add('shown')); setTimeout(() => { $('#lib').hidden = true; }, 160); };
+  reveal();   // 표지에서 커지는 전환 없이 짧은 페이드만
   Y.haptic(8);
 };
 Y.closeEditor = function () {
@@ -98,7 +90,7 @@ function renderTools0(anim) {
       B('space', '공간 삽입', () => setMode(Y.mode === 'space' ? 'pen' : 'space'), { pressed: Y.mode === 'space' }), sep(),
       B(Y.settings.finger ? 'finger' : 'hand', Y.settings.finger ? '손가락: 필기' : '손가락: 이동', () => {
         Y.settings.finger = !Y.settings.finger; Y.saveSettings(); Y.applyPaper();
-        Y.toast(Y.settings.finger ? '손가락으로 쓸 수 있어요' : '손가락으로 화면을 움직여요'); renderTools(false);
+        renderTools(false);
       }, { pressed: Y.settings.finger }));
     if (P.sel) {
       const rc = B('palette', '색 변경', () => recolorPop(rc, P));
@@ -284,7 +276,7 @@ function renderTray() {
   });
   tr.append(eb);
   tr.append(h('button', { type: 'button', class: 'penplus', 'aria-label': '펜 추가', html: Y.ic('plus'), onclick: () => {
-    if (Y.pens.length >= n) { Y.toast('펜 트레이가 가득 찼어요. 설정에서 개수를 늘리세요'); return; }
+    if (Y.pens.length >= n) { Y.toast('펜 칸이 가득 찼어요'); return; }
     Y.pens.push({ kind: 'pen', type: 'ball', color: Y.PEN_COLORS[Y.pens.length % 6], mm: 0.8, alpha: 1 }); Y.penIdx = Y.pens.length - 1; Y.mode = 'pen'; Y.savePens(); renderTray(); renderTools(false);
   } }));
 }
@@ -524,7 +516,7 @@ function exitSplit() {
 Y.openSettings = function () {
   const S = Y.settings;
   const save = () => { Y.saveSettings(); };
-  const row = (label, ctrl, note) => h('div', { class: 'srow' }, h('div', { class: 'sl' }, h('span', { text: label }), note ? h('small', { text: note }) : null), ctrl);
+  const row = (label, ctrl) => h('div', { class: 'srow' }, h('div', { class: 'sl' }, h('span', { text: label })), ctrl);
   const toggle = (key, after) => {
     const b = h('button', { type: 'button', class: 'switch', role: 'switch', 'aria-checked': S[key] ? 'true' : 'false', 'aria-label': '켜기/끄기' }, h('i'));
     b.addEventListener('click', () => { S[key] = !S[key]; b.setAttribute('aria-checked', S[key] ? 'true' : 'false'); save(); after && after(); });
@@ -540,26 +532,24 @@ Y.openSettings = function () {
     const set = d => { S.trayCount = Math.max(3, Math.min(8, S.trayCount + d)); v.textContent = S.trayCount; save(); renderTray(); };
     return h('div', { class: 'stepper' }, h('button', { type: 'button', 'aria-label': '줄이기', html: Y.ic('minus'), onclick: () => set(-1) }), v, h('button', { type: 'button', 'aria-label': '늘리기', html: Y.ic('plus'), onclick: () => set(1) }));
   };
+  const redraw = () => { Y.applyPaper(); redrawAllPages(); };
   const body = h('div', { class: 'settings' },
-    h('div', { class: 'sh' }, h('h2', { text: '설정' }), h('button', { type: 'button', class: 'round', 'aria-label': '닫기', html: Y.ic('close'), onclick: () => m.close() })),
+    h('div', { class: 'sh' }, h('button', { type: 'button', class: 'round', 'aria-label': '닫기', html: Y.ic('back'), onclick: () => m.close() }), h('h2', { text: '설정' })),
     h('h4', { text: '필기' }),
-    row('손가락으로 필기', toggle('finger', () => { Y.applyPaper(); renderTools(false); }), '끄면 손가락은 화면 이동·확대, 펜과 마우스만 필기해요'),
-    row('S Pen 버튼 동작', segc('penButton', [['eraser', '지우개'], ['lasso', '올가미']]), '펜 옆 버튼을 누른 채로 쓸 때'),
-    row('더블탭 동작', segc('doubleTap', [['undo', '실행취소'], ['eraser', '지우개']]), '앱 버전에서 적용돼요'),
-    row('글자에 맞춰 형광펜', toggle('hlSnap'), 'PDF 글자 위에 그으면 줄에 맞춰 반듯하게 칠해져요'),
-    row('모양 보정', toggle('snap'), '선을 긋고 0.6초 멈추면 직선·원·사각형으로 바뀌어요'),
-    row('손바닥 거부 강도', segc('palm', [['weak', '약'], ['mid', '중'], ['strong', '강']])),
-    row('링크는 펜으로만 열기', toggle('linkPenOnly'), '켜면 손가락 탭은 링크를 열지 않아요'),
+    row('손가락으로 쓰기', toggle('finger', () => { Y.applyPaper(); renderTools(false); })),
+    row('S Pen 버튼', segc('penButton', [['eraser', '지우개'], ['lasso', '올가미']])),
+    row('모양 보정', toggle('snap')),
+    row('형광펜 글자 맞춤', toggle('hlSnap')),
+    row('손바닥 무시', segc('palm', [['weak', '약'], ['mid', '중'], ['strong', '강']])),
     h('h4', { text: '화면' }),
-    row('탭 라벨 언어', segc('tabLang', [['en', 'English'], ['ko', '한글']], renderTabs)),
-    row('다크 모드', segc('dark', [['off', '끔'], ['on', '켬'], ['auto', '기기 따라']], () => { Y.applyPaper(); redrawAllPages(); })),
-    row('종이 색 기본값', segc('paper', [['white', '흰색'], ['gray', '연회색']], () => { Y.applyPaper(); redrawAllPages(); }), '다크 모드에서는 어두운 종이로 바뀌어요'),
-    row('펜 트레이 개수', stepper()),
-    row('햅틱 세기', segc('haptic', [['off', '끔'], ['mid', '보통'], ['strong', '강']]), '진동을 지원하는 기기에서 적용돼요'),
-    h('h4', { text: '데이터' }),
-    row('자동 저장 간격', segc('autosave', [[0, '즉시'], [1000, '1초'], [5000, '5초']])),
-    row('내보내기 위치', segc('exportDir', [['files', '파일'], ['share', '공유']]), '공유 버튼을 누르면 필기를 합친 PDF가 만들어져요'),
-    row('휴지통 보관 기간', segc('trashDays', [[7, '7일'], [30, '30일'], [90, '90일']])));
-  const m = Y.modal(body, { cls: 'sheet' });
+    row('다크 모드', segc('dark', [['off', '끔'], ['on', '켬'], ['auto', '기기']], redraw)),
+    row('종이 색', segc('paper', [['white', '흰색'], ['gray', '회색']], redraw)),
+    row('펜 칸 개수', stepper()),
+    row('진동', segc('haptic', [['off', '끔'], ['mid', '약'], ['strong', '강']])),
+    h('h4', { text: '저장' }),
+    row('자동 저장', segc('autosave', [[0, '즉시'], [1000, '1초'], [5000, '5초']])),
+    row('내보내기', segc('exportDir', [['files', '파일'], ['share', '공유']])),
+    row('휴지통 보관', segc('trashDays', [[7, '7일'], [30, '30일'], [90, '90일']])));
+  const m = Y.modal(body, { cls: 'page' });
 };
 })(window.Y);

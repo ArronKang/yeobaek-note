@@ -632,3 +632,123 @@ img,svg,canvas{-webkit-user-drag:none;-webkit-touch-callout:none}
 
 /* 종이 위 버튼은 브라우저 스크롤 대신 앱이 직접 스크롤 (스크롤이 한 번씩 먹히던 문제) */
 .qch,.qno,.qbtn{touch-action:none}
+
+/* =====================================================================
+   디자인 정리 (단순하게)
+   - 글꼴 하나(Pretendard), 장식 없음(그림자·노이즈·제본·블러)
+   - 움직임은 짧은 투명도 전환만. 튀거나 흐려지는 효과 없음
+   - 커서는 작은 점
+   ===================================================================== */
+:root{
+  --font:'Pretendard Variable',Pretendard,-apple-system,'Apple SD Gothic Neo',system-ui,sans-serif;
+  --display:var(--font); --mono:var(--font);
+  --shadow-paper:0 0 0 1px rgba(33,37,41,.06);
+  --shadow-pop:0 4px 16px rgba(33,37,41,.10);
+  --shadow-cover:none;
+  --chrome-bg:var(--bg);
+  --t:.14s;
+}
+html[data-theme="dark"]{--shadow-paper:0 0 0 1px rgba(248,249,250,.06);--shadow-pop:0 4px 16px rgba(0,0,0,.4);--chrome-bg:var(--bg)}
+html[data-paper="dark"]{--paper-line:var(--g5);--paper-line2:var(--g6)}
+.mono{font-family:var(--font);font-variant-numeric:tabular-nums}
+
+/* 커서: 작은 점 */
+*,*::before,*::after{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Ccircle cx='6' cy='6' r='3' fill='%23495057' stroke='%23f8f9fa' stroke-width='1.5'/%3E%3C/svg%3E") 6 6,default!important}
+input[type=text],input[type=search],.tinput,.sq,.sinput,.tbox{cursor:text!important}
+
+/* 움직임: 블러·튐·흔들림 모두 끄고 투명도만 */
+*,*::before,*::after{animation:none!important}
+button,.pen,.ptile,.pname,.switch,.switch i,.qch,.qcn,.qc-act,.qbtn,.citem .cover,.cover,.tab,#ind,.qstar,.qcol .qb{transition:background-color var(--t),color var(--t),border-color var(--t),opacity var(--t)!important;transform:none!important;filter:none!important}
+button:active:not(:disabled){transform:none!important}
+.switch i{transition:left var(--t)!important;left:3px}
+.switch[aria-checked="true"] i{left:21px}
+.toast,.modal,.popover,#editor,#editor .pages,#chip,#saved,.qcard,.backdrop,.xbusy,.pname{filter:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+.toast{transform:translateX(-50%)!important;transition:opacity var(--t)!important;box-shadow:none;border-radius:10px}
+.backdrop{transition:opacity var(--t)!important;background:rgba(33,37,41,.28)}
+.modal{transform:none!important;transition:none!important;box-shadow:var(--shadow-pop);border-radius:14px}
+.popover{transform:none!important;transition:opacity var(--t)!important;border-radius:12px;padding:8px}
+#editor,#editor.shown,#editor .pages{transition:opacity var(--t)!important}
+#chrome{-webkit-backdrop-filter:none;backdrop-filter:none;transition:transform .2s ease!important}
+#chip{transform:translateX(-50%)!important;transition:opacity var(--t)!important}
+.qcard{transform:none!important;transition:opacity var(--t)!important;box-shadow:var(--shadow-pop);border-color:var(--paper-line)}
+.qripple{display:none}
+.page.loading .paper{background-image:none}
+.qs-cell .qs-a{transition:none}
+.pen.sel{box-shadow:none}
+.ptype.on .ptile{box-shadow:none}
+.pname{opacity:1;transform:none}
+.qc-act.hot{transform:none!important}
+
+/* 장식 제거 */
+.holes,.rings,.choles,.cover::after,.paper::after{display:none!important}
+.sitem.on::before{display:none}
+.sitem.on{box-shadow:none}
+.seg button.on{box-shadow:none}
+#pagebar{-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none}
+.xring{box-shadow:none}
+
+/* 라이브러리 */
+.disp{font-family:var(--font);font-weight:700;font-size:30px;letter-spacing:-.02em}
+.lhead{margin-bottom:28px}
+.cover{background-image:none;box-shadow:none;border-radius:6px}
+html[data-theme="dark"] .cover{box-shadow:inset 0 0 0 1px rgba(248,249,250,.10)}
+.cover.light{box-shadow:inset 0 0 0 1px rgba(33,37,41,.06)}
+.ctitle{font-family:var(--font);font-weight:600;font-size:17px;line-height:1.3;letter-spacing:-.01em;left:14px;right:14px;bottom:14px}
+.npprev .ctitle{font-size:14px;left:10px;right:10px;bottom:10px}
+.cbadge{background:none;color:inherit;top:8px;right:8px;width:auto;height:auto;opacity:.7}
+.cover .cbadge{color:#f8f9fa}.cover.light .cbadge{background:none;color:#212529}
+.cscore{font-family:var(--font);font-weight:700}
+.cname{margin-top:10px;font-size:14px}
+.tmark{font-family:var(--font)}
+.tpick .paper.tmini{--paper:#fff;--paper-line:#ced4da;--paper-line2:#e9ecef;--ink:#212529;--paper-label:#868e96}
+@media (hover:hover){.citem:hover .cover{box-shadow:none}}
+
+/* 에디터 상단: 두 줄, 낮게 */
+.r1{min-height:44px;padding:4px 10px}
+.r2{min-height:44px;padding:0 10px}
+.tools-in{padding:2px 0}
+.tool,.sbtn{height:34px}
+#tools .tool{width:36px}
+#tools .tool .ic{width:20px;height:20px}
+#tabs{width:200px;height:32px;padding:3px;box-shadow:none}
+#ind{display:none}
+.tab{height:26px;color:var(--mist)}
+.tab[aria-selected="true"]{background:var(--raise);color:var(--snow)}
+html[data-theme="dark"] .tab[aria-selected="true"]{background:var(--g6)}
+#tray{height:44px;gap:2px}
+.pen{width:36px;height:36px;border-radius:10px}
+.pen svg{width:30px;height:30px}
+.penplus{width:24px;height:24px;border-width:1px}
+@media (min-width:560px) and (max-width:819px){
+  .r1{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);grid-template-areas:none;padding:4px 10px}
+  .left,.right,#tabs{grid-area:auto}
+  #tabs{width:184px}
+  .r2{flex-direction:row;align-items:center;padding:0 10px}
+  #tools{width:auto}
+  #tray{align-self:auto;margin-left:6px;height:44px}
+}
+
+/* 페이지 추가: 맨 아래까지 내렸을 때만 */
+.addpage{width:44px;height:44px;max-width:none;border:0;border-radius:50%;background:var(--graphite);opacity:0;pointer-events:none}
+.addpage.show{opacity:1;pointer-events:auto}
+
+/* 문제지 글꼴 */
+.qtitle{font-family:var(--font);font-weight:700;font-size:calc(26 * var(--dp));letter-spacing:-.02em;line-height:1.15}
+.qno{font-family:var(--font);font-weight:700;font-size:calc(16 * var(--dp))}
+.qscore,.qrv{font-family:var(--font);font-weight:700}
+.qfoot{font-family:var(--font);font-variant-numeric:tabular-nums}
+.tl-head h3{font-family:var(--font);font-weight:700}
+
+/* 설정: 따로 한 화면 */
+.backdrop:has(.modal.page){padding:0;background:var(--bg)}
+.modal.page{width:100%;max-width:none;height:100%;max-height:none;border:0;border-radius:0;box-shadow:none;padding:0;background:var(--bg)}
+.modal.page .settings{max-width:620px;margin:0 auto;padding:max(12px,env(safe-area-inset-top)) 20px 40px}
+.sh{justify-content:flex-start;gap:6px;background:var(--bg);padding:8px 0 12px}
+.sh h2{font-size:20px;font-weight:700}
+.settings h4{margin:22px 0 2px}
+.srow{min-height:50px;padding:6px 0}
+.srow small{display:none}
+.switch[aria-checked="true"] i{background:var(--on-lilac)}
+html[data-theme="dark"] .switch i{background:var(--g2)}
+html[data-theme="dark"] .switch[aria-checked="true"] i{background:var(--g8)}
+.cdot{box-shadow:0 0 0 2px var(--raise) inset,0 0 0 1px var(--slate)}

@@ -91,6 +91,9 @@ const ICON = {
 };
 Y.ic = (n, sz) => '<svg class="ic" viewBox="0 0 24 24"' + (sz ? ' width="' + sz + '" height="' + sz + '"' : '') + ' aria-hidden="true">' + (ICON[n] || '') + '</svg>';
 
+/* 화면에 보이는 글자에서 가운뎃점(·) 빼기 */
+Y.clean = s => String(s == null ? '' : s).replace(/\s*[·•]\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+
 /* ---------- 토큰 상수 ---------- */
 Y.COVERS = [
   { id: 'char', name: '차콜', c: '#212529' }, { id: 'slate', name: '슬레이트', c: '#343a40' },
@@ -234,6 +237,8 @@ Y.confirm = function (o) {
 /* ---------- 팝오버 ---------- */
 Y.popover = function (anchor, node, opt) {
   opt = opt || {};
+  // 켜고 끄기: 같은 버튼을 다시 누르면 닫기만 함
+  if (Y._pop && Y._pop.anchor === anchor) { Y.closePopover(); return null; }
   Y.closePopover();
   const pop = h('div', { class: 'popover', role: 'dialog' }, node);
   if (opt.width) pop.style.width = opt.width + 'px';
@@ -245,9 +250,9 @@ Y.popover = function (anchor, node, opt) {
   pop.style.left = left + 'px'; pop.style.top = top + 'px';
   pop.style.transformOrigin = Math.round(r.left + r.width / 2 - left) + 'px 0px';
   requestAnimationFrame(() => pop.classList.add('in'));
-  const off = e => { if (pop.contains(e.target)) return; if (opt.keep && opt.keep(e.target)) return; Y.closePopover(); };
+  const off = e => { if (pop.contains(e.target) || anchor.contains(e.target)) return; if (opt.keep && opt.keep(e.target)) return; Y.closePopover(); };
   setTimeout(() => document.addEventListener('pointerdown', off, true), 0);
-  Y._pop = { pop, off, owner: opt.owner, onClose: opt.onClose };
+  Y._pop = { pop, off, anchor, owner: opt.owner, onClose: opt.onClose };
   return pop;
 };
 Y.closePopover = function () {

@@ -1,9 +1,9 @@
-/* 예제 문제지: 영어 · 국어 · 통합과학 · 한국사 (모두 직접 쓴 지문과 문항) */
+/* 예제 문제지: 영어 국어 통합과학 한국사 (모두 직접 쓴 지문과 문항) */
 (function (Y) {
 'use strict';
 Y.QUIZ_SAMPLES = [
 {
-  ybq: 1, title: 'English Reading & Grammar', subject: '예제 문제지 · 고2 영어', cover: 'sage',
+  ybq: 1, title: 'English Reading & Grammar', subject: '예제 문제지 고2 영어', cover: 'sage',
   problems: [
     { type: 'passage', q: '[1~2] 다음 글을 읽고 물음에 답하시오.',
       text: 'Many people believe that creativity is a rare gift that only a few are born with. However, research suggests that creative thinking is more like a muscle than a talent. When we practice looking at familiar problems from new angles, our brains form connections that make original ideas easier to find. For example, students who listed unusual uses for everyday objects every morning showed clear improvements in creative tasks after just a few weeks. The key is not waiting for inspiration, but building habits that invite it. In other words, creativity grows when we ____________.' },
@@ -24,7 +24,7 @@ Y.QUIZ_SAMPLES = [
   ]
 },
 {
-  ybq: 1, title: '국어 독서 · 문법', subject: '예제 문제지 · 고2 국어', cover: 'rose',
+  ybq: 1, title: '국어 독서 문법', subject: '예제 문제지 고2 국어', cover: 'rose',
   problems: [
     { type: 'passage', q: '[1~2] 다음 글을 읽고 물음에 답하시오.',
       text: '잠은 단순히 몸을 쉬게 하는 시간이 아니다. 우리가 잠든 동안 뇌는 낮에 받아들인 정보를 정리하여 오래 남길 기억과 버릴 기억을 가려낸다. 특히 깊은 잠 단계에서는 뇌의 해마에 임시로 저장되었던 정보가 대뇌 피질로 옮겨지며 장기 기억으로 굳어지는데, 이를 \'기억의 공고화\'라고 한다. 따라서 시험 전날 잠을 줄여 가며 공부하는 것은 오히려 학습 효과를 떨어뜨릴 수 있다. 새로 익힌 내용이 장기 기억으로 자리 잡을 시간을 스스로 빼앗는 셈이기 때문이다.' },
@@ -35,14 +35,14 @@ Y.QUIZ_SAMPLES = [
       answer: '기억의 공고화', solution: '3문장: "…장기 기억으로 굳어지는데, 이를 **\'기억의 공고화\'** 라고 한다."' },
     { type: 'choice', points: 3, space: 60, q: '다음 중 **비음화**가 일어나는 단어는?',
       choices: ['굳이 [구지]', '국물 [궁물]', '신라 [실라]', '좋다 [조타]', '맏형 [마텽]'], answer: 2,
-      solution: '비음화: 받침 ㄱ·ㄷ·ㅂ 이 비음(ㄴ·ㅁ) 앞에서 ㅇ·ㄴ·ㅁ 으로 바뀌는 현상.\n**국물**: ㄱ + ㅁ → ㅇ + ㅁ [궁물] ✓\n① 구개음화 ③ 유음화 ④⑤ 거센소리되기(축약)' },
+      solution: '비음화: 받침 ㄱ ㄷ ㅂ 이 비음(ㄴ ㅁ) 앞에서 ㅇ ㄴ ㅁ 으로 바뀌는 현상.\n**국물**: ㄱ + ㅁ → ㅇ + ㅁ [궁물] ✓\n① 구개음화 ③ 유음화 ④⑤ 거센소리되기(축약)' },
     { type: 'choice', points: 3, space: 50, q: '다음 중 높임 표현이 바르게 쓰인 것은?',
       choices: ['할머니께서 진지를 잡수신다.', '고객님, 주문하신 음료 나오셨습니다.', '동생이 할아버지께 선물을 줬다.', '사장님의 말씀이 계시겠습니다.', '문의하신 상품은 품절이세요.'], answer: 1,
-      solution: '① 주체(께서·-시-)와 특수 어휘(진지, 잡수시다) 모두 알맞아요.\n②⑤ 사물을 높였어요 → "나왔습니다", "품절입니다"\n③ 객체 높임 → "드렸다"\n④ 간접 높임은 "있으시다" → "말씀이 있으시겠습니다"' }
+      solution: '① 주체(께서 -시-)와 특수 어휘(진지, 잡수시다) 모두 알맞아요.\n②⑤ 사물을 높였어요 → "나왔습니다", "품절입니다"\n③ 객체 높임 → "드렸다"\n④ 간접 높임은 "있으시다" → "말씀이 있으시겠습니다"' }
   ]
 },
 {
-  ybq: 1, title: '통합과학 개념 점검', subject: '예제 문제지 · 고1 통합과학', cover: 'mustard',
+  ybq: 1, title: '통합과학 개념 점검', subject: '예제 문제지 고1 통합과학', cover: 'mustard',
   problems: [
     { type: 'choice', points: 2, q: '질량이 $2\\,\\mathrm{kg}$ 인 물체에 $6\\,\\mathrm{N}$ 의 알짜힘이 작용할 때, 물체의 가속도의 크기는?',
       choices: ['$1\\,\\mathrm{m/s^2}$', '$2\\,\\mathrm{m/s^2}$', '$3\\,\\mathrm{m/s^2}$', '$6\\,\\mathrm{m/s^2}$', '$12\\,\\mathrm{m/s^2}$'], answer: 3,
@@ -61,7 +61,7 @@ Y.QUIZ_SAMPLES = [
   ]
 },
 {
-  ybq: 1, title: '한국사 흐름 잡기', subject: '예제 문제지 · 고1 한국사', cover: 'terra',
+  ybq: 1, title: '한국사 흐름 잡기', subject: '예제 문제지 고1 한국사', cover: 'terra',
   problems: [
     { type: 'choice', points: 2, space: 40, q: '훈민정음을 창제하고 반포한 왕은?',
       choices: ['태조', '태종', '세종', '세조', '성종'], answer: 3,
@@ -74,9 +74,9 @@ Y.QUIZ_SAMPLES = [
     { type: 'choice', points: 3, space: 50, q: '1894년 추진된 갑오개혁에 대한 설명으로 옳은 것은?',
       choices: ['과거제를 폐지하고 신분제를 없앴다.', '전국적으로 금 모으기 운동을 벌였다.', '훈련도감을 처음 설치하였다.', '대동법을 처음 시행하였다.', '독립문을 세웠다.'], answer: 1,
       solution: '갑오개혁: **과거제 폐지, 신분제 폐지**, 연좌제 폐지 등.\n② 1997년 외환 위기 ③ 임진왜란 중(선조) ④ 광해군 때 경기도부터 ⑤ 독립협회' },
-    { type: 'choice', points: 2, space: 40, q: '1919년 3·1 운동 이후 독립운동을 조직적으로 이끌기 위해 중국 상하이에 수립된 것은?',
+    { type: 'choice', points: 2, space: 40, q: '1919년 3 1 운동 이후 독립운동을 조직적으로 이끌기 위해 중국 상하이에 수립된 것은?',
       choices: ['신간회', '대한민국 임시 정부', '독립 협회', '의열단', '조선어 학회'], answer: 2,
-      solution: '3·1 운동 이후 여러 임시 정부가 통합되어 1919년 상하이에 **대한민국 임시 정부**가 세워졌어요.' }
+      solution: '3 1 운동 이후 여러 임시 정부가 통합되어 1919년 상하이에 **대한민국 임시 정부**가 세워졌어요.' }
   ]
 }
 ];

@@ -64,7 +64,7 @@ function buildPane(P) {
   }), { root: P.scroll, rootMargin: '1400px 0px' });
   P.doc.pages.forEach(pg => createPage(P, pg));
   if (P.doc.type === 'note') {
-    const b = h('button', { type: 'button', class: 'addpage', html: Y.ic('plus') + '<span>페이지 추가</span>', onclick: () => Y.addPage(P) });
+    const b = h('button', { type: 'button', class: 'addpage', 'aria-label': '페이지 추가', html: Y.ic('plus'), onclick: () => Y.addPage(P) });
     P.pages.append(b); P.addBtn = b;
   }
   P.doc.pages.forEach(pg => { setSizes(pg); P.io.observe(pg.el); });
@@ -157,6 +157,8 @@ Y.setZoom = function (P, z, anchor) {
 
 function updatePageIdx(P) {
   if (!P.doc) return;
+  // 페이지 추가 버튼은 맨 아래까지 내렸을 때만
+  if (P.addBtn) { const S = P.scroll; P.addBtn.classList.toggle('show', S.scrollTop + S.clientHeight >= S.scrollHeight - 80); }
   const r = P.scroll.getBoundingClientRect(), mid = r.top + (r.height + parseFloat(getComputedStyle(P.scroll).paddingTop)) / 2;
   let n = 0;
   for (let i = 0; i < P.doc.pages.length; i++) { const pr = P.doc.pages[i].el.getBoundingClientRect(); n = i; if (pr.bottom > mid) break; }

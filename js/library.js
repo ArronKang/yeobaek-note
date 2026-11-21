@@ -108,8 +108,7 @@ function folderMenu(anchor, f) {
 /* ---------- 본문 ---------- */
 function coverEl(n, small) {
   const c = h('div', { class: 'cover' + (small ? ' sm' : '') + (Y.coverLight(n.cover) ? ' light' : ''), style: '--cv:' + Y.coverColor(n.cover) });
-  c.append(h('div', { class: 'choles' }));
-  if (!small) c.append(h('div', { class: 'ctitle', text: n.title || '제목 없음' }));
+  if (!small) c.append(h('div', { class: 'ctitle', text: Y.clean(n.title) || '제목 없음' }));
   if (n.kind === 'quiz' && !small) {
     c.append(h('div', { class: 'cbadge', html: Y.ic('quiz') }));
     if (n.score) c.append(h('div', { class: 'cscore', text: n.score }));
@@ -125,8 +124,7 @@ function renderBody() {
   /* 헤더 */
   const title = h('div', { class: 'ltitle' },
     h('button', { type: 'button', class: 'round menu', 'aria-label': '메뉴 열기', html: Y.ic('menu'), onclick: () => Y.drawer(true) }),
-    h('div', {}, h('h1', { class: 'disp', text: viewTitle() }),
-      h('div', { class: 'cap', text: trash ? '노트 ' + notes.length + '개 · ' + Y.settings.trashDays + '일 뒤 영구 삭제' : L.q ? '“' + L.q + '” · 노트 ' + notes.length + '개' : '노트 ' + notes.length + '개' })));
+    h('div', {}, h('h1', { class: 'disp', text: viewTitle() })));
   const act = h('div', { class: 'lact' });
   if (L.selecting) {
     act.append(h('span', { class: 'cap sc', text: L.sel.size + '개 선택됨' }));
@@ -176,10 +174,10 @@ function renderBody() {
 }
 function emptyState(trash) {
   const fav = L.view === 'fav' && !L.q;
-  if (L.q) return h('div', { class: 'empty' }, h('div', { class: 'eic', html: Y.ic('search', 40) }), h('h2', { text: '검색 결과가 없어요' }), h('p', { text: '‘' + L.q + '’와 일치하는 노트가 없어요. 다른 단어로 검색해 보세요' }));
-  if (trash) return h('div', { class: 'empty' }, h('div', { class: 'eic', html: Y.ic('trash', 40) }), h('h2', { text: '휴지통이 비어 있어요' }), h('p', { text: '삭제한 노트는 ' + Y.settings.trashDays + '일 동안 여기에 보관돼요' }));
-  if (fav) return h('div', { class: 'empty' }, h('div', { class: 'eic', html: Y.ic('star', 40) }), h('h2', { text: '즐겨찾기한 노트가 없어요' }), h('p', { text: '노트를 길게 눌러 선택한 뒤 즐겨찾기를 누르세요' }));
-  return h('div', { class: 'empty' }, h('div', { class: 'eic', html: Y.ic('notes', 40) }), h('h2', { text: '아직 노트가 없어요' }), h('p', { text: '새 노트를 만들거나 PDF를 가져와 시작하세요' }),
+  if (L.q) return h('div', { class: 'empty' }, h('div', { class: 'eic', html: Y.ic('search', 40) }), h('h2', { text: '검색 결과가 없어요' }));
+  if (trash) return h('div', { class: 'empty' }, h('div', { class: 'eic', html: Y.ic('trash', 40) }), h('h2', { text: '휴지통이 비어 있어요' }));
+  if (fav) return h('div', { class: 'empty' }, h('div', { class: 'eic', html: Y.ic('star', 40) }), h('h2', { text: '즐겨찾기한 노트가 없어요' }));
+  return h('div', { class: 'empty' }, h('div', { class: 'eic', html: Y.ic('notes', 40) }), h('h2', { text: '아직 노트가 없어요' }),
     h('div', { class: 'eact' }, h('button', { type: 'button', class: 'btn primary', text: '새 노트', onclick: newNoteModal }), h('button', { type: 'button', class: 'btn ghost', text: '가져오기', onclick: () => $('#libfile').click() })));
 }
 function bindItem(el, n, trash) {
@@ -191,7 +189,7 @@ function bindItem(el, n, trash) {
   el.addEventListener('click', () => {
     if (el._lp) { el._lp = false; return; }
     if (L.selecting) { L.sel.has(n.id) ? L.sel.delete(n.id) : L.sel.add(n.id); if (!L.sel.size) L.selecting = false; renderBody(); return; }
-    if (trash) { Y.toast('휴지통의 노트는 복원한 뒤 열 수 있어요'); return; }
+    if (trash) { Y.toast('복원한 뒤 열 수 있어요'); return; }
     Y.openNote(n, el.querySelector('.cover'));
   });
 }
@@ -271,7 +269,6 @@ function newNoteModal() {
     h('div', { class: 'nnrow' }, pv, h('div', { class: 'nnf' }, h('label', { class: 'flabel', text: '제목' }), inp, h('label', { class: 'flabel', text: '커버 색' }), covers)),
     h('label', { class: 'flabel', text: '페이지 양식' }), tpls,
     h('div', { class: 'dlg-act' }, h('button', { class: 'btn ghost', text: '취소', onclick: () => m.close() }), h('button', { class: 'btn primary', text: '만들기', onclick: go }))), { cls: 'wide' });
-  setTimeout(() => { inp.focus(); inp.select(); }, 80);
 }
 
 /* ---------- 열기 ---------- */
@@ -288,10 +285,7 @@ Y.openNote = function (n, coverElm) {
   const doc = n.kind === 'quiz' ? Y.quizDoc(n) : Y.noteDoc(n);
   if (!doc) { Y.toast('문제지 데이터를 찾을 수 없어요'); return; }
   Y.enterEditor({ doc, rect, color: Y.coverColor(n.cover) });
-  if (n.kind === 'quiz' && !Y.store.get('yeobaek.v5.hint', false)) {
-    Y.store.set('yeobaek.v5.hint', true);
-    setTimeout(() => Y.toast('문제나 답칸을 꾹 누르면 정답과 풀이가 떠올라요', { ms: 4000 }), 900);
-  }
+
 };
 /* 여백에서 내보낸 PDF: 안에 첨부된 원본(yeobaek.ybq)으로 문제지·노트를 그대로 되살림 */
 async function fromPack(doc) {
@@ -325,17 +319,17 @@ $('#libfile').addEventListener('change', e => {
   const isQuiz = /\.ybq$/i.test(f.name) || /json/.test(f.type);
   const asQuiz = () => f.text().then(t => {
     const spec = Y.parseQuiz(t);
-    Y.toast('문제지를 준비하는 중…', { ms: 4000 });
+    
     return Y.importQuiz(spec, { folder: (L.view.startsWith && L.view.startsWith('f:')) ? L.view.slice(2) : null }).then(meta => {
       if (!L.view.startsWith('f:')) L.view = 'quiz';
       renderSide(); renderBody(); Y.toast('문제지를 가져왔어요'); setTimeout(() => Y.openNote(meta), 150);
     });
   });
-  if (isQuiz) { asQuiz().catch(() => Y.toast('문제지 파일을 읽을 수 없어요. .ybq 형식인지 확인하세요', { ms: 4500 })); return; }
+  if (isQuiz) { asQuiz().catch(() => Y.toast('열 수 없는 파일이에요')); return; }
   const head = f.slice(0, 5).text ? f.slice(0, 5).text() : Promise.resolve('');
   head.then(sig => {
-    if (sig.trim().startsWith('{')) return asQuiz().catch(() => Y.toast('문제지 파일을 읽을 수 없어요', { ms: 4500 }));
-    Y.toast('PDF를 여는 중…', { ms: 8000 });
+    if (sig.trim().startsWith('{')) return asQuiz().catch(() => Y.toast('열 수 없는 파일이에요'));
+    
     Y.openPdfFile(f).then(async doc => {
       Y.$('.toast') && Y.$('.toast').remove();
       const meta = await fromPack(doc);
