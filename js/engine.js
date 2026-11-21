@@ -174,7 +174,7 @@ Y.saveDoc = function (doc) {
   if (!doc) return;
   const pages = doc.pages.map(p => { const o = { ratio: p.ratio, tpl: p.tpl, strokes: p.strokes, texts: p.texts }; if (p.qi) { o.qi = p.qi; o.head = p.head; } return o; });
   if (doc.type === 'note' || doc.type === 'quiz') {
-    if (!Y.store.set('yeobaek.v2.n.' + doc.id, { pages })) return;
+    if (!Y.store.set('yeobaek.v2.n.' + doc.id, doc.lv ? { pages, lv: doc.lv } : { pages })) return;
     const m = Y.lib.notes.find(n => n.id === doc.id);
     if (m) { m.title = doc.title; m.updated = Date.now(); m.pageCount = pages.length; Y.saveLib(); }
   } else if (doc.key) {

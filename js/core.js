@@ -57,6 +57,7 @@ const ICON = {
   library: '<rect x="4" y="4" width="6.5" height="16" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="7" rx="1.5"/><rect x="13.5" y="14" width="6.5" height="6" rx="1.5"/>',
   page: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
   pageplus: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v5M9.5 14.5h5"/>',
+  moon: '<path d="M19.5 14.6A7.8 7.8 0 0 1 9.4 4.5 7.8 7.8 0 1 0 19.5 14.6z"/>',
   sidebar: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/>',
   split: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M12 4.5v15"/>',
   template: '<rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M4 10h16M10 10v10"/>',
@@ -120,11 +121,21 @@ Y.settings = Object.assign({
 }, Y.store.get('yeobaek.v2.settings', {}));
 if (!Y.settings.v3) { Y.settings.v3 = 1; Y.settings.finger = false; Y.settings.theme = Y.settings.theme || 'light'; }
 Y.saveSettings = () => Y.store.set('yeobaek.v2.settings', Y.settings);
+// 다크 모드: 끔 / 켬 / 기기 설정 따라. 켜지면 화면과 종이가 함께 어두워짐
+if (!Y.settings.dark) Y.settings.dark = Y.settings.theme === 'dark' || Y.settings.paper === 'dark' ? 'on' : 'off';
+if (Y.settings.paper === 'dark') Y.settings.paper = 'white';
+const sysDark = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : { matches: false };
+Y.isDark = () => Y.settings.dark === 'on' || (Y.settings.dark === 'auto' && sysDark.matches);
 Y.applyPaper = () => {
-  const d = document.documentElement; d.dataset.paper = Y.settings.paper; d.dataset.theme = Y.settings.theme;
+  const d = document.documentElement, dark = Y.isDark();
+  d.dataset.theme = dark ? 'dark' : 'light'; d.dataset.paper = dark ? 'dark' : (Y.settings.paper === 'dark' ? 'white' : Y.settings.paper);
+  const tc = document.querySelector('meta[name="theme-color"]'); if (tc) tc.content = dark ? '#212529' : '#f8f9fa';
+  const cs = document.querySelector('meta[name="color-scheme"]'); if (cs) cs.content = dark ? 'dark' : 'light';
   document.body && document.body.classList.toggle('finger-draw', !!Y.settings.finger);
 };
 Y.applyPaper();
+// 기기 설정이 바뀌면 따라감 (필기 색 다시 그리기는 편집 화면이 맡음)
+if (sysDark.addEventListener) sysDark.addEventListener('change', () => { if (Y.settings.dark === 'auto') { Y.applyPaper(); Y.onThemeChange && Y.onThemeChange(); } });
 Y.haptic = ms => {
   if (Y.settings.haptic === 'off' || !navigator.vibrate) return;
   try { navigator.vibrate(Y.settings.haptic === 'strong' ? ms * 2 : ms); } catch (e) {}

@@ -42,7 +42,11 @@ function choiceCols(p) {
   const L = Math.max.apply(null, p.choices.map(c => String(c).replace(/\$[^$]*\$/g, 'xxx').length));
   return L <= 6 ? 5 : L <= 16 ? 3 : 1;
 }
-function blockHTML(spec, idx) {
+// 간격 버전: 1 = 처음 간격(이미 필기한 문제지), 2 = 촘촘한 간격
+const LV = 2;
+const workH = (p, lv) => lv >= 2 ? Math.max(14, Math.round(p.space * 0.45)) : p.space;
+const gapOf = lv => lv >= 2 ? 16 : 26;
+function blockHTML(spec, idx, lv) {
   const p = spec.problems[idx];
   if (p.type === 'passage') return '<div class="qb qpass" data-qi="' + idx + '">' + (p.q ? '<div class="qp-h">' + tex(p.q) + '</div>' : '') + '<div class="qp-t">' + tex(p.text) + '</div></div>';
   let s = '<div class="qb" data-qi="' + idx + '">' +
@@ -52,26 +56,27 @@ function blockHTML(spec, idx) {
     s += '<div class="qchoices c' + choiceCols(p) + '">' + p.choices.map((c, i) =>
       '<button type="button" class="qch" data-i="' + (i + 1) + '" aria-label="' + (i + 1) + '번 보기"><span class="qcn">' + CIRC[i] + '</span><span class="qct">' + tex(c) + '</span></button>').join('') + '</div>';
   }
-  s += '<div class="qwork" style="height:calc(' + p.space + ' * var(--dp))">' + (p.type === 'short' ? '<div class="qansline"><span>답</span><b></b></div>' : '') + '</div>';
+  s += '<div class="qwork" style="height:calc(' + workH(p, lv) + ' * var(--dp))">' + (p.type === 'short' ? '<div class="qansline"><span>답</span><b></b></div>' : '') + '</div>';
   return s + '</div>';
 }
 const qcount = spec => spec.problems.filter(p => p.type !== 'passage').length;
 function headHTML(spec) {
   return '<div class="qhdr">' + (spec.subject ? '<div class="qsub">' + esc(spec.subject) + '</div>' : '') +
     '<h2 class="qtitle">' + esc(spec.title) + '</h2>' +
-    '<div class="qmeta"><span>' + qcount(spec) + '문항</span><span class="qname">이름<b></b></span></div>' +
+    '<div class="qmeta"><span>' + qcount(spec) + '문항</span></div>' +
     '<div class="qscore" aria-live="polite"></div></div>';
 }
 
 /* ---------- 페이지 나누기 (한 번 계산해서 저장) ---------- */
-function paginate(spec) {
+function paginate(spec, lv) {
+  lv = lv || LV;
   const box = h('div', { class: 'qmeasure paper', style: '--dp:1px;width:' + PW + 'px' });
   const lay = h('div', { class: 'qlayer' }); box.append(lay); document.body.append(box);
   lay.innerHTML = headHTML(spec);
   const headH = lay.firstChild.offsetHeight + 22;
-  const hs = spec.problems.map((p, i) => { lay.innerHTML = blockHTML(spec, i); return lay.firstChild.offsetHeight; });
+  const hs = spec.problems.map((p, i) => { lay.innerHTML = blockHTML(spec, i, lv); return lay.firstChild.offsetHeight; });
   box.remove();
-  const avail = PH - PAD_T - PAD_B - 28, GAP = 26, pages = [];
+  const avail = PH - PAD_T - PAD_B - 28, GAP = gapOf(lv), pages = [];
   let cur = { qi: [], head: true }, used = headH;
   hs.forEach((bh, i) => {
     if (cur.qi.length && used + bh > avail) { pages.push(cur); cur = { qi: [], head: false }; used = 0; }
@@ -104,8 +109,8 @@ Y.prepQuiz = function (n) {
     const old = data.pages || [];
     if (old.some(p => (p.strokes && p.strokes.length) || (p.texts && p.texts.length))) return;
     const pages = paginate(spec).map(p => ({ ratio: Y.RATIO, tpl: 'quiz', qi: p.qi, head: p.head, strokes: [], texts: [] }));
-    if (JSON.stringify(pages.map(p => p.qi)) === JSON.stringify(old.map(p => p.qi))) return;
-    Y.store.set('yeobaek.v2.n.' + n.id, { pages }); n.pageCount = pages.length; Y.saveLib();
+    if (data.lv === LV && JSON.stringify(pages.map(p => p.qi)) === JSON.stringify(old.map(p => p.qi))) return;
+    Y.store.set('yeobaek.v2.n.' + n.id, { pages, lv: LV }); n.pageCount = pages.length; Y.saveLib();
   }).catch(() => {});
 };
 
@@ -117,19 +122,19 @@ Y.addQuiz = function (spec, opts) {
   const pages = paginate(spec).map(p => ({ ratio: Y.RATIO, tpl: 'quiz', qi: p.qi, head: p.head, strokes: [], texts: [] }));
   meta.pageCount = pages.length;
   Y.store.set('yeobaek.v2.q.' + id, spec);
-  Y.store.set('yeobaek.v2.n.' + id, { pages });
+  Y.store.set('yeobaek.v2.n.' + id, { pages, lv: LV });
   Y.lib.notes.unshift(meta); Y.saveLib();
   return meta;
 };
 Y.quizDoc = function (n) {
   const spec = Y.store.get('yeobaek.v2.q.' + n.id, null);
   const data = Y.store.get('yeobaek.v2.n.' + n.id, null);
-  let pages = data && data.pages;
+  let pages = data && data.pages, lv = (data && data.lv) || 1;
   if (!spec) return null;
-  if (!pages || !pages.length || !pages[0].qi) pages = paginate(spec).map(p => ({ tpl: 'quiz', qi: p.qi, head: p.head }));
+  if (!pages || !pages.length || !pages[0].qi) { pages = paginate(spec).map(p => ({ tpl: 'quiz', qi: p.qi, head: p.head })); lv = LV; }
   pages = pages.map(p => ({ ratio: Y.RATIO, tpl: 'quiz', qi: p.qi || [], head: !!p.head, strokes: p.strokes || [], texts: p.texts || [] }));
   const st = Y.store.get('yeobaek.v2.qs.' + n.id, null) || {};
-  return { id: n.id, type: 'quiz', title: n.title, quiz: spec, qs: { sel: st.sel || {}, rev: st.rev || {}, grade: st.grade || {}, star: st.star || {}, focus: !!st.focus }, pages };
+  return { id: n.id, type: 'quiz', lv, title: n.title, quiz: spec, qs: { sel: st.sel || {}, rev: st.rev || {}, grade: st.grade || {}, star: st.star || {}, focus: !!st.focus }, pages };
 };
 const saveState = doc => {
   Y.store.set('yeobaek.v2.qs.' + doc.id, doc.qs);
@@ -153,7 +158,7 @@ Y.quizScore = score;
 /* ---------- 페이지 레이어 ---------- */
 Y.quizLayer = function (doc, pg) {
   const lay = h('div', { class: 'qlayer' });
-  lay.innerHTML = (pg.head ? headHTML(doc.quiz) : '') + '<div class="qcol">' + pg.qi.map(i => blockHTML(doc.quiz, i)).join('') + '</div>' +
+  lay.innerHTML = (pg.head ? headHTML(doc.quiz) : '') + '<div class="qcol" style="gap:calc(' + gapOf(doc.lv) + ' * var(--dp))">' + pg.qi.map(i => blockHTML(doc.quiz, i, doc.lv)).join('') + '</div>' +
     '<div class="qfoot">' + (doc.pages.indexOf(pg) + 1) + ' / ' + doc.pages.length + '</div>';
   lay.dataset.doc = doc.id; lay.classList.toggle('focus', !!doc.qs.focus);
   pg.qi.forEach(i => paintBlock(lay, doc, i, false));
@@ -256,7 +261,6 @@ function openCard(qb, doc, i, at, pt, press) {
   const g = doc.qs.grade[i];
   const act = (v, icon, label) => h('button', { type: 'button', class: 'qc-act ' + v + (g === v ? ' on' : ''), 'data-v': v, html: Y.ic(icon) + '<span>' + label + '</span>', onclick: () => setGrade(doc, i, v) });
   card.append(h('div', { class: 'qc-acts' }, act('clear', 'reset', '답안 제거'), act('o', 'check', '맞았어요'), act('x', 'close', '틀렸어요')));
-  if (press) card.append(h('div', { class: 'qc-hint', text: '누른 채로 밀어서 고르고 떼세요' }));
   card.append(h('div', { class: 'qc-top' }, h('span', { class: 'qc-k', text: p.no + '번 정답' }),
     h('button', { type: 'button', class: 'qc-x', 'aria-label': '닫기', html: Y.ic('close'), onclick: closeCard })));
   const big = p.type === 'choice' ? (CIRC[+p.answer - 1] || p.answer) : p.answer;
@@ -288,21 +292,61 @@ function openCard(qb, doc, i, at, pt, press) {
   }
 }
 
-/* 누른 채로 밀어서 고르기 */
+/* 누른 채로 밀어서 고르기
+   - 누른 채 버튼 위에서 떼면 그 버튼, 아무 데서나 떼면 바로 닫힘
+   - 펜은 뗀 뒤에도 메뉴 위에 띄워 두면(호버) 유지, 펜을 멀리 들면 닫힘 */
 let drag = null;
+function setHot(a) {
+  if (!drag || a === drag.hot) return;
+  if (drag.hot) drag.hot.classList.remove('hot');
+  drag.hot = a; if (a) { a.classList.add('hot'); Y.haptic(6); }
+}
+function endDrag(close) {
+  if (!drag) return;
+  clearTimeout(drag.t); setHot(null); drag = null;
+  if (close) closeCard();
+}
+function hitAct(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const a = el && el.closest && el.closest('.qc-act');
+  return a && drag && drag.card.contains(a) ? a : null;
+}
 window.addEventListener('pointermove', e => {
   if (!drag) return;
-  if (!drag.card.isConnected) { drag = null; return; }
-  const el = document.elementFromPoint(e.clientX, e.clientY);
-  let a = el && el.closest && el.closest('.qc-act'); if (a && !drag.card.contains(a)) a = null;
-  if (a !== drag.hot) { if (drag.hot) drag.hot.classList.remove('hot'); drag.hot = a; if (a) { a.classList.add('hot'); Y.haptic(6); } }
+  if (!drag.card.isConnected) { endDrag(false); return; }
+  if (drag.hover) {
+    if (e.pointerType !== 'pen') return;
+    // 펜이 떠 있는 동안 계속 들어오는 움직임: 끊기면(멀리 듦) 닫힘
+    clearTimeout(drag.t); drag.t = setTimeout(() => endDrag(true), 900);
+  }
+  setHot(hitAct(e.clientX, e.clientY));
 }, { capture: true, passive: true });
-window.addEventListener('pointerup', () => {
-  if (!drag) return;
-  const a = drag.hot; drag = null;
-  if (a) { a.classList.remove('hot'); a.click(); }
+window.addEventListener('pointerup', e => {
+  if (!drag || drag.hover) return;
+  Y._lpAt = performance.now();               // 뗄 때 아래 보기가 눌리지 않게
+  const a = drag.hot;
+  if (a) { endDrag(false); a.click(); return; }
+  if (e.pointerType === 'pen') {
+    // 펜 호버 단계로: 곧 호버 움직임이 안 오면(호버 없는 기기·멀리 듦) 닫힘
+    drag.hover = true; clearTimeout(drag.t); drag.t = setTimeout(() => endDrag(true), 500);
+    return;
+  }
+  endDrag(true);
 }, true);
-window.addEventListener('pointercancel', () => { if (drag && drag.hot) drag.hot.classList.remove('hot'); drag = null; }, true);
+window.addEventListener('pointerdown', e => {
+  // 호버 단계에서 펜으로 다시 누름: 버튼이면 그 버튼(클릭으로 처리), 카드 밖이면 아래 핸들러가 닫음
+  if (drag && drag.hover) { const a = hitAct(e.clientX, e.clientY); endDrag(false); if (!a && !(e.target.closest && e.target.closest('.qcard'))) closeCard(); }
+}, true);
+window.addEventListener('pointerout', e => {
+  // 펜이 감지 범위를 벗어남 (relatedTarget 없음)
+  if (drag && drag.hover && e.pointerType === 'pen' && !e.relatedTarget) endDrag(true);
+}, true);
+window.addEventListener('pointercancel', () => endDrag(false), true);
+// 누른 채 끄는 동안, 그리고 문제지 위의 펜은 화면을 스크롤하지 않음
+document.addEventListener('touchmove', e => {
+  const t = e.touches[0];
+  if ((drag && !drag.hover) || (t && t.touchType === 'stylus' && e.target.closest && e.target.closest('#panes'))) e.preventDefault();
+}, { capture: true, passive: false });
 
 /* 꾹 누르기: 엔진이 펜/손가락을 한자리에 0.45초 머물면 호출 */
 Y.quizLongPress = function (pg, x, y) {

@@ -136,6 +136,9 @@ function renderTools0(anim) {
       B('grid', '격자 보기', () => { E.grid = !E.grid; $('#editor').classList.toggle('gridview', E.grid); renderTools(false); }, { pressed: E.grid }),
       B('split', '분할 보기', toggleSplit, { pressed: Y.panes.length === 2 }));
     const pb = B('paper', '종이 색', () => paperPop(pb)); row.append(pb);
+    row.append(B('moon', '다크 모드', () => {
+      Y.settings.dark = Y.isDark() ? 'off' : 'on'; Y.saveSettings(); Y.applyPaper(); redrawAllPages(); renderTools(false); Y.haptic(8);
+    }, { pressed: Y.isDark() }));
   }
   box.append(row);
 }
@@ -190,13 +193,14 @@ function tocPop(anchor, P) {
 }
 function paperPop(anchor) {
   const list = h('div', { class: 'plist' });
-  [['white', '흰색'], ['gray', '연회색'], ['dark', '다크']].forEach(p => {
+  [['white', '흰색'], ['gray', '연회색']].forEach(p => {
     list.append(h('button', { type: 'button', class: 'pitem' + (Y.settings.paper === p[0] ? ' on' : ''), text: p[1], onclick: () => {
       Y.settings.paper = p[0]; Y.saveSettings(); Y.applyPaper(); redrawAllPages(); Y.closePopover();
     } }));
   });
   Y.popover(anchor, h('div', {}, h('div', { class: 'ptitle', text: '종이 색' }), list), { width: 180, align: 'left' });
 }
+Y.onThemeChange = () => { redrawAllPages(); if (!$('#editor').hidden) renderTools(false); };
 function redrawAllPages() { Y.panes.forEach(P => P.doc.pages.forEach(pg => { Y.redraw(pg); Y.setSizes(pg); })); }
 function recolorPop(anchor, P) {
   const row = h('div', { class: 'swatches' });
@@ -548,8 +552,8 @@ Y.openSettings = function () {
     row('링크는 펜으로만 열기', toggle('linkPenOnly'), '켜면 손가락 탭은 링크를 열지 않아요'),
     h('h4', { text: '화면' }),
     row('탭 라벨 언어', segc('tabLang', [['en', 'English'], ['ko', '한글']], renderTabs)),
-    row('화면 테마', segc('theme', [['light', '밝은 회색'], ['dark', '어두운 회색']], () => Y.applyPaper())),
-    row('종이 색 기본값', segc('paper', [['white', '흰색'], ['gray', '연회색'], ['dark', '다크']], () => { Y.applyPaper(); redrawAllPages(); })),
+    row('다크 모드', segc('dark', [['off', '끔'], ['on', '켬'], ['auto', '기기 따라']], () => { Y.applyPaper(); redrawAllPages(); })),
+    row('종이 색 기본값', segc('paper', [['white', '흰색'], ['gray', '연회색']], () => { Y.applyPaper(); redrawAllPages(); }), '다크 모드에서는 어두운 종이로 바뀌어요'),
     row('펜 트레이 개수', stepper()),
     row('햅틱 세기', segc('haptic', [['off', '끔'], ['mid', '보통'], ['strong', '강']]), '진동을 지원하는 기기에서 적용돼요'),
     h('h4', { text: '데이터' }),
