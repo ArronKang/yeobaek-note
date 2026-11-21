@@ -140,12 +140,12 @@ Y.quizDoc = function (n) {
   if (!pages || !pages.length || !pages[0].qi) { pages = paginate(spec).map(p => ({ tpl: 'quiz', qi: p.qi, head: p.head })); lv = LV; }
   pages = pages.map(p => ({ ratio: Y.RATIO, tpl: 'quiz', qi: p.qi || [], head: !!p.head, strokes: p.strokes || [], texts: p.texts || [] }));
   const st = Y.store.get('yeobaek.v2.qs.' + n.id, null) || {};
-  return { id: n.id, type: 'quiz', lv, title: n.title, quiz: spec, qs: { sel: st.sel || {}, rev: st.rev || {}, grade: st.grade || {}, star: st.star || {}, focus: !!st.focus }, pages };
+  return { id: n.id, type: 'quiz', lv, title: n.title, quiz: spec, qs: { sel: st.sel || {}, rev: st.rev || {}, grade: st.grade || {}, star: st.star || {}, focus: !!st.focus, scored: !!st.scored }, pages };
 };
 const saveState = doc => {
   Y.store.set('yeobaek.v2.qs.' + doc.id, doc.qs);
   const m = Y.lib.notes.find(n => n.id === doc.id);
-  if (m) { const sc = score(doc); m.score = sc.graded ? sc.right + '/' + sc.total : null; m.updated = Date.now(); Y.saveLib(); }
+  if (m) { const sc = score(doc); m.score = sc.graded && doc.qs.scored ? sc.right + '/' + sc.total : null; m.updated = Date.now(); Y.saveLib(); }
   Y.flashSaved && Y.flashSaved();
 };
 
@@ -237,7 +237,8 @@ function paintBlock(root, doc, i, anim) {
 function paintScore(root, doc, anim) {
   const el = root.querySelector('.qscore'); if (!el) return;
   const sc = score(doc);
-  if (!sc.graded) { el.innerHTML = ''; return; }
+  // 점수는 "전체 채점"을 눌렀을 때만 (정답 하나 엿봤다고 0/8이 크게 뜨면 김이 빠짐)
+  if (!sc.graded || !doc.qs.scored) { el.innerHTML = ''; return; }
   el.innerHTML = '<span class="qs-n">' + sc.right + '</span><span class="qs-d">/' + sc.total + '</span><svg viewBox="0 0 120 20" aria-hidden="true"><path class="draw" d="M4 12c22-5 52-7 112-4"/></svg>';
   if (anim && !Y.reduced.matches) { el.classList.remove('anim'); void el.offsetWidth; el.classList.add('anim'); }
 }
@@ -423,6 +424,7 @@ Y.gradeAll = function (doc) {
     doc.qs.grade[i] = isRight(p, doc.qs.sel[i]) ? 'o' : 'x';
     doc.qs.rev[i] = Object.assign(doc.qs.rev[i] || {}, { ans: 1 }); n++;
   });
+  doc.qs.scored = true;
   saveState(doc); doc.quiz.problems.forEach((p, i) => refresh(doc, i, true));
   const sc = score(doc);
   if (!n && !sc.graded) Y.toast('고른 보기가 없어요');

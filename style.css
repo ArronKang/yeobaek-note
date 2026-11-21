@@ -1273,3 +1273,5 @@ html[data-theme="dark"] .pdfbg{filter:brightness(.88)}
 /* 처음 한 번: 보기 동그라미가 손가락에 눌렸다 올라옴 */
 .qcn.nudge{animation:nudge 1.2s var(--out)!important}
 @keyframes nudge{0%,100%{scale:1}18%{scale:.78}40%{scale:1.08}58%{scale:.86}78%{scale:1.03}}
+/* 세로 화면 선택 모드: 글자 버튼 대신 아이콘 (꾹 누르면 이름표) */
+@media (max-width:819px){.lact .sbtn span{display:none}.lact .sbtn{width:40px;padding:0;justify-content:center}.lact .sbtn .ic{width:21px;height:21px}}

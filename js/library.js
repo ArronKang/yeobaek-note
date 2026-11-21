@@ -291,7 +291,8 @@ function newNoteModal() {
     const meta = { id, title, cover: st.cover, folder: L.view.startsWith('f:') ? L.view.slice(2) : null, fav: false, trashed: false, created: now, updated: now, pageCount: 1 };
     Y.lib.notes.push(meta); Y.saveLib();
     Y.store.set('yeobaek.v2.n.' + id, { pages: [{ ratio: Y.RATIO, tpl: st.tpl, strokes: [], texts: [] }] });
-    if (L.view === 'trash' || L.view === 'fav') L.view = 'all'; L.q = '';
+    // 돌아왔을 때 방금 만든 노트가 보이는 보기로
+    if (!['all', 'recent'].includes(L.view) && !L.view.startsWith('f:')) { L.view = 'all'; Y.store.set('yeobaek.v2.libview', 'all'); } L.q = ''; L.searching = false;
     m.close(); renderSide(); renderBody();
     const el = Y.$('.citem[data-id="' + id + '"] .cover') || Y.$('.ritem[data-id="' + id + '"] .cover');
     setTimeout(() => Y.openNote(meta, el), 120);
@@ -344,6 +345,9 @@ async function keepPdf(doc, bytes) {
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   }
   doc.libId = m.id; doc.title = m.title;
+  // 돌아왔을 때 가져온 PDF가 보이는 보기로
+  if (!['pdf', 'recent'].includes(L.view) && !L.view.startsWith('f:')) { L.view = 'pdf'; Y.store.set('yeobaek.v2.libview', 'pdf'); }
+  L.q = ''; L.searching = false;
   renderSide(); renderBody();
 }
 
