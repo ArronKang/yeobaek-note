@@ -1229,3 +1229,12 @@ html[data-theme="dark"] .toast{background:#eceef2;color:#1d1e22}
 #editor.collapsed #handle{transition:transform .3s var(--out)!important}
 @media (prefers-reduced-motion:reduce){#editor,#lib,.lbody{transition:none!important;animation:none!important;transform:none!important}}
 #chrome,#handle{touch-action:none}
+
+/* 패드 영상에서 찾은 것 */
+/* 꺼진 스위치가 밝은 화면에서 안 보이던 것: 바탕을 한 단계 진하게 */
+.switch{background:var(--g3)}
+html[data-theme="dark"] .switch{background:#45474e}
+/* 펜 칸 개수 +/- 를 누르면 회색 네모가 생기던 것 */
+.stepper button,.stepper button:hover{background:none!important;border-radius:50%}
+.stepper button:active{background:var(--fill)!important}
+.mini:hover{background:none}

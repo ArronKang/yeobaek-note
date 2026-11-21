@@ -61,7 +61,7 @@ function buildPane(P) {
     const pg = en.target._pg; if (!pg) return;
     if (en.isIntersecting) { if (!pg.active) { pg.active = true; allocate(pg); } }
     else if (pg.active) { pg.active = false; free(pg); }
-  }), { root: P.scroll, rootMargin: '1400px 0px' });
+  }), { root: P.scroll, rootMargin: '900px 0px' });
   P.doc.pages.forEach(pg => createPage(P, pg));
   if (P.doc.type === 'note') {
     const b = h('button', { type: 'button', class: 'addpage', 'aria-label': '페이지 추가', html: Y.ic('plus'), onclick: () => Y.addPage(P) });
@@ -81,13 +81,11 @@ function createPage(P, pg, before) {
   if (P.doc.type === 'pdf') { pg.bg = h('canvas', { class: 'pdfbg' }); paper.append(pg.bg); wrap.classList.add('loading'); }
   else if (pg.bg) pg.bg = null;
   if (P.doc.type === 'note') paper.append(h('div', { class: 'holes' }));
-  // 줄·모눈·점 양식은 캔버스에 기기 픽셀에 맞춰 그림 (CSS 1px 선은 배율에 따라 사라짐)
-  pg.tc = h('canvas', { class: 'tplc', 'aria-hidden': 'true' }); paper.append(pg.tc);
   pg.ink = h('canvas', { class: 'ink' });
-  // 저지연 캔버스: 브라우저 합성 단계를 건너뛰어 펜 끝을 더 빨리 그림 (첫 getContext에서만 지정 가능)
-  try { pg.ink.getContext('2d', { desynchronized: true }); } catch (e) {}
+  // 저지연(desynchronized) 캔버스는 쓰지 않음: 일부 안드로이드에서 비운 캔버스를 검게 그림 (패드 영상에서 확인)
   // 예측 획: 펜이 갈 곳을 미리 그려 끝이 따라붙는 느낌을 줄임. 다음 움직임에서 지움
   pg.pv = h('canvas', { class: 'pv', 'aria-hidden': 'true' });
+  pg.pv.width = 0; pg.pv.height = 0;   // 펜을 쓰기 전엔 메모리 0
   pg.tl = h('div', { class: 'tlayer' });
   paper.append(pg.ink, pg.pv, pg.tl);
   if (P.doc.type === 'quiz' && Y.quizLayer) paper.append(Y.quizLayer(P.doc, pg));
@@ -117,7 +115,7 @@ Y.setTemplate = function (pg, tpl) {
   pg.paper.className = 'paper tpl-' + tpl;
   pg.paper.querySelectorAll('.tpl').forEach(n => n.remove());
   const html = Y.tplHTML(tpl); if (html) pg.paper.insertAdjacentHTML('afterbegin', html);
-  if (pg.active) drawTpl(pg);
+  if (pg.active) redraw(pg);
   queueSave(pg.pane);
 };
 
@@ -131,35 +129,34 @@ function setSizes(pg) {
     const rs = Math.min(Y.DPR, 3000 / W, 4096 / H);
     pg.rs = rs;
     pg.ink.width = Math.round(W * rs); pg.ink.height = Math.round(H * rs);
-    pg.pv.width = pg.ink.width; pg.pv.height = pg.ink.height;
-    drawTpl(pg);
+    if (pg.pv.width) { pg.pv.width = pg.ink.width; pg.pv.height = pg.ink.height; }
     redraw(pg); layoutTexts(pg);
   }
 }
-function drawTpl(pg) {
-  const t = pg.tpl, c = pg.tc;
-  if (!c) return;
-  if (t !== 'lined' && t !== 'grid' && t !== 'dot') { c.width = 0; c.height = 0; return; }
-  c.width = pg.ink.width; c.height = pg.ink.height;
-  const ctx = c.getContext('2d'), W = c.width, H = c.height, dp = W / 560;
+// 줄·모눈·점 양식: 필기 캔버스 맨 아래에 기기 픽셀에 맞춰 그림 (CSS 1px 선은 배율에 따라 사라지고, 따로 캔버스를 두면 메모리가 큼)
+function drawTpl(pg, ctx) {
+  const t = pg.tpl;
+  if (pg.pane.doc.type !== 'note' || (t !== 'lined' && t !== 'grid' && t !== 'dot')) return;
+  const W = ctx.canvas.width, H = ctx.canvas.height, dp = W / 560;
   const cs = getComputedStyle(pg.paper), l1 = cs.getPropertyValue('--paper-line').trim() || '#ced4da', l2 = cs.getPropertyValue('--paper-line2').trim() || '#e9ecef';
   const lw = Math.max(1, Math.round(pg.rs));            // 화면 1px = 기기 픽셀 몇 개
   const snap = v => Math.round(v) + (lw % 2 ? 0.5 : 0);  // 픽셀 경계에 맞춰 흐려지지 않게
-  ctx.clearRect(0, 0, W, H); ctx.lineWidth = lw;
   const from = (o, st) => o - Math.floor(o / st) * st;
+  ctx.save(); ctx.lineWidth = lw;
   if (t === 'lined') { ctx.strokeStyle = l1; ctx.beginPath(); for (let y = from(44 * dp, 28 * dp); y < H; y += 28 * dp) { const yy = snap(y - lw); ctx.moveTo(0, yy); ctx.lineTo(W, yy); } ctx.stroke(); }
   else if (t === 'grid') {
     ctx.strokeStyle = l2; ctx.beginPath();
     for (let y = from(4 * dp, 20 * dp); y < H; y += 20 * dp) { const yy = snap(y - lw); ctx.moveTo(0, yy); ctx.lineTo(W, yy); }
     for (let x = from(2 * dp, 20 * dp); x < W; x += 20 * dp) { const xx = snap(x - lw); ctx.moveTo(xx, 0); ctx.lineTo(xx, H); }
     ctx.stroke();
-  } else { ctx.fillStyle = l1; const r = Math.max(1.2, 1.4 * dp); for (let y = 20 * dp; y < H; y += 20 * dp) for (let x = 20 * dp; x < W; x += 20 * dp) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); } }
+  } else { ctx.fillStyle = l1; const r = Math.max(1.2, 1.4 * dp); ctx.beginPath(); for (let y = 20 * dp; y < H; y += 20 * dp) for (let x = 20 * dp; x < W; x += 20 * dp) { ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, Math.PI * 2); } ctx.fill(); }
+  ctx.restore();
 }
 Y.drawTpl = drawTpl;
 function allocate(pg) { setSizes(pg); if (pg.pane.doc.type === 'pdf') Y.renderPdf(pg); }
 function free(pg) {
   if (pg.task) { try { pg.task.cancel(); } catch (e) {} pg.task = null; }
-  pg.token++; pg.ink.width = 0; pg.ink.height = 0; pg.pv.width = 0; pg.pv.height = 0; pg.tc.width = 0; pg.tc.height = 0;
+  pg.token++; pg.ink.width = 0; pg.ink.height = 0; pg.pv.width = 0; pg.pv.height = 0;
   if (pg.bg) { pg.bg.width = 0; pg.bg.height = 0; pg.el.classList.add('loading'); }
 }
 Y.setSizes = setSizes;
@@ -320,6 +317,7 @@ function redraw(pg) {
   if (!pg.active || !pg.ink.width) return;
   const ctx = pg.ink.getContext('2d'), K = pg.ink.width, P = pg.pane;
   ctx.clearRect(0, 0, K, pg.ink.height); clearPred(pg);
+  drawTpl(pg, ctx);
   const sr = Y.searchRects && Y.searchRects(pg);
   if (sr) {
     sr.rects.forEach((r, i) => {
@@ -394,6 +392,7 @@ function drawPred(pg, st, e, rect) {
     pts.push(q);
   }
   if (pts.length < 3) return;
+  if (pg.pv.width !== pg.ink.width) { pg.pv.width = pg.ink.width; pg.pv.height = pg.ink.height; }
   drawStroke(pg.pv.getContext('2d'), Object.assign({}, st, { p: pts, _live: true }));
   pg._pred = true;
 }

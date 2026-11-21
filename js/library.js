@@ -207,7 +207,7 @@ function rowItem(n, trash) {
   const it = h('div', { class: 'ritem' + (sel ? ' sel' : ''), 'data-id': n.id, role: 'button', tabindex: 0, 'aria-label': n.title });
   it.append(coverEl(n, true), h('div', { class: 'rmain' }, h('div', { class: 'rt', text: n.title || '제목 없음' }), h('div', { class: 'cap', text: Y.fmtDate(n.updated) })),
     h('div', { class: 'rpg' }, h('span', { class: 'mono', text: n.pageCount || 1 }), ' 페이지'),
-    L.selecting ? h('span', { class: 'ccheck inl' + (sel ? ' on' : ''), html: sel ? Y.ic('check', 14) : '' }) : (n.fav ? h('span', { class: 'rfav', html: Y.ic('star', 16) }) : null));
+    ...[L.selecting ? h('span', { class: 'ccheck inl' + (sel ? ' on' : ''), html: sel ? Y.ic('check', 14) : '' }) : (n.fav ? h('span', { class: 'rfav', html: Y.ic('star', 16) }) : null)].filter(Boolean));   // append(null)은 "null" 글자가 됨
   it.addEventListener('keydown', e => { if (e.key === 'Enter') it.click(); });
   bindItem(it, n, trash); return it;
 }
@@ -241,7 +241,10 @@ function newNoteModal() {
   const used = new Set(Y.lib.notes.filter(n => !n.trashed).map(n => n.title));
   let k = 1; while (used.has('새 노트 ' + k)) k++;
   const auto = '새 노트 ' + k;
-  const st = { title: auto, cover: Y.COVERS[0].id, tpl: 'lined' };
+  // 표지 색은 마지막 노트 다음 색으로 돌아가며 (서재가 한 가지 색으로 덮이지 않게)
+  const last = Y.lib.notes.filter(n => !n.trashed && n.kind !== 'quiz').sort((a, b) => b.created - a.created)[0];
+  const ci = last ? (Y.COVERS.findIndex(c => c.id === last.cover) + 1) % Y.COVERS.length : 1;
+  const st = { title: auto, cover: Y.COVERS[Math.max(0, ci)].id, tpl: 'lined' };
   const inp = h('input', { type: 'text', class: 'tinput ttl', value: '', placeholder: auto, maxlength: 40, 'aria-label': '노트 제목' });
   const covers = h('div', { class: 'swrow', role: 'radiogroup', 'aria-label': '커버 색' });
   const tpls = h('div', { class: 'tplrow', role: 'radiogroup', 'aria-label': '페이지 양식' });
