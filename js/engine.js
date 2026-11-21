@@ -2,7 +2,10 @@
 (function (Y) {
 'use strict';
 const h = Y.h, $ = Y.$, rnd = Y.rnd;
-const MM = 210, RATIO = 1.4142, LILAC = '#B9A9FF', ACT_W = 794;
+const MM = 210, RATIO = 1.4142, ACT_W = 794;
+// 올가미·선택 표시는 강조색 (예전 보라색은 나머지 화면과 따로 놀았음)
+let LILAC = '#4c5fd5';
+const accent = () => { const v = getComputedStyle(document.documentElement).getPropertyValue('--acc').trim(); if (v) LILAC = v; return LILAC; };
 Y.MM = MM; Y.RATIO = RATIO;
 Y.panes = []; Y.active = null; Y.penDown = false; Y.lastPen = -1e9;
 Y.makePage = tpl => ({ ratio: RATIO, tpl: tpl || 'lined', strokes: [], texts: [] });
@@ -179,8 +182,11 @@ Y.setZoom = function (P, z, anchor) {
 
 function updatePageIdx(P) {
   if (!P.doc) return;
-  // 페이지 추가 버튼은 맨 아래까지 내렸을 때만
-  if (P.addBtn) { const S = P.scroll; P.addBtn.classList.toggle('show', S.scrollTop + S.clientHeight >= S.scrollHeight - 80); }
+  // 노트 맨 아래에 처음 닿으면 고무줄 단서 (멈춘 뒤에)
+  if (P.doc.type === 'note' && Y.pullPeek) {
+    const S = P.scroll, atEnd = () => S.scrollTop + S.clientHeight >= S.scrollHeight - 2;
+    if (atEnd()) { clearTimeout(P.peekT); P.peekT = setTimeout(() => { if (atEnd() && !P.scrolling && !P.glide) Y.pullPeek(P); }, 500); }
+  }
   const r = P.scroll.getBoundingClientRect(), mid = r.top + (r.height + parseFloat(getComputedStyle(P.scroll).paddingTop)) / 2;
   let n = 0;
   for (let i = 0; i < P.doc.pages.length; i++) { const pr = P.doc.pages[i].el.getBoundingClientRect(); n = i; if (pr.bottom > mid) break; }
@@ -205,6 +211,8 @@ Y.saveDoc = function (doc) {
     const any = pages.some(p => p.strokes.length || p.texts.length);
     if (any) Y.store.set('yeobaek.v2.p.' + doc.key, { pages: pages.map(p => ({ strokes: p.strokes, texts: p.texts })) });
     else Y.store.del('yeobaek.v2.p.' + doc.key);
+    const m = Y.lib.notes.find(n => n.kind === 'pdf' && n.key === doc.key);
+    if (m) { m.updated = Date.now(); Y.saveLib(); }
   }
   Y.flashSaved && Y.flashSaved();
 };
@@ -322,8 +330,8 @@ function redraw(pg) {
   if (sr) {
     sr.rects.forEach((r, i) => {
       ctx.save();
-      ctx.fillStyle = 'rgba(185,169,255,.38)'; ctx.fillRect(r[0] * K, r[1] * K, r[2] * K, r[3] * K);
-      if (i === sr.cur) { ctx.strokeStyle = '#7A5AF8'; ctx.lineWidth = 2 * pg.rs; ctx.strokeRect(r[0] * K, r[1] * K, r[2] * K, r[3] * K); }
+      ctx.fillStyle = 'rgba(255,214,10,.35)'; ctx.fillRect(r[0] * K, r[1] * K, r[2] * K, r[3] * K);
+      if (i === sr.cur) { ctx.strokeStyle = accent(); ctx.lineWidth = 2 * pg.rs; ctx.strokeRect(r[0] * K, r[1] * K, r[2] * K, r[3] * K); }
       ctx.restore();
     });
   }
@@ -340,7 +348,7 @@ Y.redraw = redraw;
 function drawSel(ctx, pg, K) {
   const b = pg.pane.sel.box, rs = pg.rs, x = b[0] * K, y = b[1] * K, w = (b[2] - b[0]) * K, hh = (b[3] - b[1]) * K;
   ctx.save();
-  ctx.fillStyle = 'rgba(185,169,255,.10)'; ctx.fillRect(x, y, w, hh);
+  accent(); ctx.fillStyle = 'rgba(76,95,213,.08)'; ctx.fillRect(x, y, w, hh);
   ctx.setLineDash([6 * rs, 4 * rs]); ctx.lineDashOffset = -pg.dash; ctx.lineWidth = 1.6 * rs; ctx.strokeStyle = LILAC; ctx.strokeRect(x, y, w, hh);
   ctx.setLineDash([]);
   [[x, y], [x + w, y], [x, y + hh], [x + w, y + hh]].forEach(p => {
@@ -355,7 +363,7 @@ function flowDash(pg) {
 }
 function drawLasso(pg, pts) {
   const ctx = pg.ink.getContext('2d'), K = pg.ink.width, rs = pg.rs;
-  ctx.save(); ctx.setLineDash([6 * rs, 4 * rs]); ctx.lineWidth = 1.6 * rs; ctx.strokeStyle = LILAC; ctx.lineJoin = 'round';
+  ctx.save(); ctx.setLineDash([6 * rs, 4 * rs]); ctx.lineWidth = 1.6 * rs; ctx.strokeStyle = accent(); ctx.lineJoin = 'round';
   ctx.beginPath(); pts.forEach((p, i) => { if (i) ctx.lineTo(p[0] * K, p[1] * K); else ctx.moveTo(p[0] * K, p[1] * K); }); ctx.stroke(); ctx.restore();
 }
 function snapStart(pg, st) {

@@ -44,7 +44,7 @@ const ICON = {
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   retry: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v3.2h3.2"/><path d="M10 10l4 4M14 10l-4 4"/>',
   compose: '<path d="M11 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V13"/><path d="M17.6 3.6a1.9 1.9 0 0 1 2.7 2.7L12.5 14l-3.6.9.9-3.6z"/>',
-  importf: '<path d="M12 4v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19.5h14"/>',
+  importf: '<path d="M4.5 13.5v4a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-4"/><path d="M12 3.5v10"/><path d="M8 9.5l4 4 4-4"/>',
   focus: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
   quiz: '<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M9 8.5h6M9 12h6M9 15.5h3"/><path d="M14.5 15.5l1.3 1.3 2.4-2.6"/>',
   reset: '<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/>',
@@ -182,11 +182,31 @@ Y.savePens = () => { Y.store.set('yeobaek.v2.pens', Y.pens); Y.store.set('yeobae
   Y.lib = lib;
   const lim = Y.settings.trashDays * 864e5;
   Y.lib.notes = Y.lib.notes.filter(n => {
-    if (n.trashed && Date.now() - n.trashedAt > lim) { Y.store.del('yeobaek.v2.n.' + n.id); return false; }
+    if (n.trashed && Date.now() - n.trashedAt > lim) { setTimeout(() => Y.purge(n)); return false; }
     return true;
   });
 })();
 Y.saveLib = () => Y.store.set('yeobaek.v2.lib', Y.lib);
+
+/* 큰 파일(PDF 원본) 저장소: IndexedDB. localStorage(5~10MB)에는 PDF가 안 들어감 */
+Y.blob = (() => {
+  let dbp = null;
+  const db = () => dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open('yeobaek', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('blobs');
+    r.onsuccess = () => res(r.result); r.onerror = () => { dbp = null; rej(r.error); };
+  }));
+  const tx = (mode, fn) => db().then(d => new Promise((res, rej) => {
+    const t = d.transaction('blobs', mode), req = fn(t.objectStore('blobs'));
+    t.oncomplete = () => res(req.result); t.onerror = t.onabort = () => rej(t.error);
+  }));
+  return { put: (k, v) => tx('readwrite', s => s.put(v, k)), get: k => tx('readonly', s => s.get(k)), del: k => tx('readwrite', s => s.delete(k)) };
+})();
+// 영구 삭제: 노트·문제지·PDF의 모든 저장 조각을 한곳에서
+Y.purge = n => {
+  ['n', 'q', 'qs'].forEach(k => Y.store.del('yeobaek.v2.' + k + '.' + n.id));
+  if (n.kind === 'pdf') { Y.blob.del(n.id).catch(() => {}); if (n.key) Y.store.del('yeobaek.v2.p.' + n.key); }
+};
 Y.fmtDate = ts => new Date(ts).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
 
 /* ---------- 토스트 ---------- */

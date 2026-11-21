@@ -80,6 +80,13 @@ Y.pullRelease = function (P) {
   spring(P, v, 0);
 };
 
+// 처음 노트 맨 아래에 닿았을 때 한 번: 틀이 살짝 딸려 나왔다 들어감 (당길 수 있다는 단서, 글 없이)
+Y.pullPeek = function (P) {
+  if (Y.reduced.matches || P.scrolling || P.springRaf || Y.store.get('yeobaek.v6.pullhint', false)) return;
+  Y.store.set('yeobaek.v6.pullhint', true);
+  P.bouncing = false; spring(P, 0, 520, null);
+};
+
 // 관성으로 벽에 부딪힘: 그 속도로 눌렸다가 돌아옴 (페이지 추가는 안 함)
 Y.bounce = function (P, push) {
   if (Y.reduced.matches || P.scrolling) return;

@@ -2,7 +2,7 @@
 (function (Y) {
 'use strict';
 const h = Y.h, $ = Y.$;
-const L = Y.L = { view: 'all', mode: Y.store.get('yeobaek.v2.libmode', 'cover'), sort: 'updated', q: '', sel: new Set(), selecting: false, collapsed: new Set() };
+const L = Y.L = { view: Y.store.get('yeobaek.v2.libview', 'recent'), mode: Y.store.get('yeobaek.v2.libmode', 'cover'), sort: 'updated', q: '', sel: new Set(), selecting: false, collapsed: new Set() };
 const SORTS = [['updated', '수정일'], ['name', '이름'], ['created', '만든 날']];
 
 /* ---------- 데이터 도우미 ---------- */
@@ -10,7 +10,7 @@ const folderOf = id => Y.lib.folders.find(f => f.id === id);
 function descendants(id) { const out = [id]; Y.lib.folders.filter(f => f.parent === id).forEach(c => out.push(...descendants(c.id))); return out; }
 function viewTitle() {
   if (L.q) return '검색 결과';
-  if (L.view === 'all') return '노트'; if (L.view === 'quiz') return '문제지'; if (L.view === 'recent') return '최근';
+  if (L.view === 'all') return '노트'; if (L.view === 'quiz') return '문제지'; if (L.view === 'pdf') return 'PDF'; if (L.view === 'recent') return '최근';
   if (L.view === 'fav') return '즐겨찾기'; if (L.view === 'trash') return '휴지통';
   const f = folderOf(L.view.slice(2)); return f ? f.name : '모든 노트';
 }
@@ -18,17 +18,23 @@ function visible() {
   let a = Y.lib.notes.filter(n => !!n.trashed === (L.view === 'trash' && !L.q));
   if (L.q) a = a.filter(n => !n.trashed && n.title.toLowerCase().includes(L.q.toLowerCase()));
   else if (L.view === 'fav') a = a.filter(n => n.fav);
-  else if (L.view === 'all') a = a.filter(n => n.kind !== 'quiz');
+  else if (L.view === 'all') a = a.filter(n => !n.kind);
+  else if (L.view === 'pdf') a = a.filter(n => n.kind === 'pdf');
   else if (L.view === 'quiz') a = a.filter(n => n.kind === 'quiz');
   else if (L.view.startsWith('f:')) { const ids = descendants(L.view.slice(2)); a = a.filter(n => ids.includes(n.folder)); }
   const by = L.view === 'recent' && !L.q ? 'updated' : L.sort;
   a = a.slice().sort((x, y) => by === 'name' ? x.title.localeCompare(y.title, 'ko') : by === 'created' ? y.created - x.created : y.updated - x.updated);
-  if (L.view === 'recent' && !L.q) a = a.slice(0, 12);
+  if (L.view === 'recent' && !L.q) a = a.slice(0, 30);
   return a;
 }
 const count = (fn) => Y.lib.notes.filter(n => !n.trashed && fn(n)).length;
 
 /* ---------- 사이드바 ---------- */
+function setView(id) {
+  L.view = id; L.q = ''; L.searching = false; L.selecting = false; L.sel.clear();
+  if (!id.startsWith('f:') && id !== 'trash') Y.store.set('yeobaek.v2.libview', id);
+  renderSide(); renderBody();
+}
 function renderSide() {
   const side = $('#side'); side.innerHTML = '';
   const search = h('input', { class: 'sq', type: 'search', placeholder: '노트 검색', 'aria-label': '노트 검색', value: L.q });
@@ -42,11 +48,11 @@ function renderSide() {
     b.innerHTML = (extra || '') + Y.ic(icon) + '<span class="sl">' + label + '</span>' + (n != null ? '<span class="mono sn">' + n + '</span>' : '');
     b.addEventListener('click', e => {
       if (e.target.closest('.chev')) return;
-      L.view = id; L.q = ''; L.selecting = false; L.sel.clear(); Y.drawer(false); renderSide(); renderBody();
+      setView(id); Y.drawer(false);
     });
     return b;
   };
-  nav.append(item('all', 'notes', '노트', count(n => n.kind !== 'quiz')), item('quiz', 'quiz', '문제지', count(n => n.kind === 'quiz')), item('recent', 'clock', '최근'),
+  nav.append(item('recent', 'clock', '최근'), item('all', 'notes', '노트', count(n => !n.kind)), item('quiz', 'quiz', '문제지', count(n => n.kind === 'quiz')), item('pdf', 'pdf', 'PDF', count(n => n.kind === 'pdf')),
     item('fav', 'star', '즐겨찾기', count(n => n.fav)), item('trash', 'trash', '휴지통', Y.lib.notes.filter(n => n.trashed).length));
   side.append(nav);
   const fh = h('div', { class: 'fhead' }, h('span', { text: '폴더' }),
@@ -107,7 +113,8 @@ function folderMenu(anchor, f) {
 
 /* ---------- 본문 ---------- */
 function coverEl(n, small) {
-  const c = h('div', { class: 'cover' + (small ? ' sm' : '') + (Y.coverLight(n.cover) ? ' light' : ''), style: '--cv:' + Y.coverColor(n.cover) });
+  const c = h('div', { class: 'cover' + (small ? ' sm' : '') + (Y.coverLight(n.cover) ? ' light' : '') + (n.thumb ? ' thumb' : ''), style: '--cv:' + Y.coverColor(n.cover) + (n.thumb ? ';background-image:url(' + n.thumb + ')' : '') });
+  if (n.kind === 'pdf') { if (!small) c.append(h('div', { class: 'cbadge pdfb', text: 'PDF' })); return c; }
   if (!small) c.append(h('div', { class: 'ctitle', text: Y.clean(n.title) || '제목 없음' }));
   if (n.kind === 'quiz' && !small) {
     c.append(h('div', { class: 'cbadge', html: Y.ic('quiz') }));
@@ -124,13 +131,13 @@ function renderBody() {
   /* 헤더 */
   const title = h('div', { class: 'ltitle' },
     h('button', { type: 'button', class: 'round menu', 'aria-label': '메뉴 열기', html: Y.ic('menu'), onclick: () => Y.drawer(true) }),
-    h('div', {}, h('h1', { class: 'disp', text: viewTitle() })));
+    L.searching ? searchField() : h('div', {}, h('h1', { class: 'disp', text: viewTitle() })));
   const act = h('div', { class: 'lact' });
   if (L.selecting) {
     act.append(h('span', { class: 'cap sc', text: L.sel.size + '개 선택됨' }));
     if (trash) {
       act.append(Y.btn('restore', '복원', () => { L.sel.forEach(id => { const n = Y.lib.notes.find(x => x.id === id); if (n) { n.trashed = false; delete n.trashedAt; } }); Y.saveLib(); exitSel(); }, { cls: 'sbtn' }),
-        Y.btn('trash', '영구 삭제', async () => { if (await Y.confirm({ title: L.sel.size + '개 노트를 영구 삭제할까요?', ok: '영구 삭제', danger: true })) { L.sel.forEach(id => ['n', 'q', 'qs'].forEach(k => Y.store.del('yeobaek.v2.' + k + '.' + id))); Y.lib.notes = Y.lib.notes.filter(n => !L.sel.has(n.id)); Y.saveLib(); exitSel(); } }, { cls: 'sbtn warn' }));
+        Y.btn('trash', '영구 삭제', async () => { if (await Y.confirm({ title: L.sel.size + '개 노트를 영구 삭제할까요?', ok: '영구 삭제', danger: true })) { L.sel.forEach(id => { const n = Y.lib.notes.find(x => x.id === id); if (n) Y.purge(n); }); Y.lib.notes = Y.lib.notes.filter(n => !L.sel.has(n.id)); Y.saveLib(); exitSel(); } }, { cls: 'sbtn warn' }));
     } else {
       const mv = Y.btn('move', '이동', () => movePop(mv), { cls: 'sbtn' });
       act.append(Y.btn('star', '즐겨찾기', () => { const all = Array.from(L.sel).every(id => (Y.lib.notes.find(n => n.id === id) || {}).fav); L.sel.forEach(id => { const n = Y.lib.notes.find(x => x.id === id); if (n) n.fav = !all; }); Y.saveLib(); exitSel(); }, { cls: 'sbtn' }), mv,
@@ -138,8 +145,10 @@ function renderBody() {
     }
     act.append(Y.btn('close', '취소', exitSel, { cls: 'sbtn' }));
   } else {
-    // iPadOS 도구 막대처럼: 글자 없는 아이콘 버튼
-    const ib = (icon, label, fn, o) => { const x = h('button', { type: 'button', class: 'ibtn' + (o && o.on ? ' on' : ''), 'aria-label': label, html: Y.ic(icon), onclick: fn }); return x; };
+    // 글자 없는 아이콘 버튼
+    const ib = (icon, label, fn, o) => { const x = h('button', { type: 'button', class: 'ibtn' + (o && o.cls ? ' ' + o.cls : ''), 'aria-label': label, html: Y.ic(icon), onclick: fn }); return x; };
+    // 세로 화면(사이드바가 숨는 폭)에서만 보이는 검색
+    if (!L.searching) act.append(ib('search', '검색', () => { L.searching = true; renderBody(); }, { cls: 'narrow' }));
     act.append(ib(L.mode === 'cover' ? 'list' : 'cover', L.mode === 'cover' ? '목록으로 보기' : '커버로 보기', () => { L.mode = L.mode === 'cover' ? 'list' : 'cover'; Y.store.set('yeobaek.v2.libmode', L.mode); renderBody(); }));
     if (L.view !== 'recent' && !trash) {
       const chip = h('button', { type: 'button', class: 'ibtn', 'aria-label': '정렬', html: Y.ic('sort') });
@@ -157,6 +166,13 @@ function renderBody() {
     }
   }
   main.append(h('header', { class: 'lhead' }, title, act));
+  // 세로 화면 보기 바: 사이드바 대신 제목 아래에 가로로 (고른 것만 진한 글자 + 점)
+  if (!L.q) {
+    const vb = h('nav', { class: 'vbar', 'aria-label': '보기' });
+    [['recent', '최근'], ['all', '노트'], ['quiz', '문제지'], ['pdf', 'PDF'], ['fav', '즐겨찾기'], ['trash', '휴지통']].forEach(v =>
+      vb.append(h('button', { type: 'button', class: L.view === v[0] ? 'on' : '', text: v[1], onclick: () => setView(v[0]) })));
+    main.append(vb);
+  }
   /* 내용 */
   const body = h('div', { class: 'lbody' + (L._shown !== L.view ? ' enter' : '') }); L._shown = L.view;
   if (!notes.length) body.append(emptyState(trash));
@@ -171,6 +187,15 @@ function renderBody() {
   }
   main.append(body);
 }
+// 검색칸: 제목 자리에 펼쳐짐. 비운 채로 바깥을 누르면 다시 제목
+function searchField() {
+  const inp = h('input', { class: 'sq2', type: 'search', placeholder: '검색', 'aria-label': '검색', value: L.q });
+  inp.addEventListener('input', () => { L.q = inp.value; L.selecting = false; L.sel.clear(); const pos = inp.selectionStart; renderBody(); const n = $('.sq2'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} } });
+  inp.addEventListener('blur', () => { if (!inp.value) setTimeout(() => { if (!L.q && L.searching) { L.searching = false; renderBody(); } }, 150); });
+  setTimeout(() => inp.focus(), 30);
+  return h('div', { class: 'sfield' }, h('span', { html: Y.ic('search') }), inp,
+    h('button', { type: 'button', class: 'ibtn', 'aria-label': '검색 닫기', html: Y.ic('close'), onclick: () => { L.q = ''; L.searching = false; renderBody(); } }));
+}
 function emptyState(trash) {
   const fav = L.view === 'fav' && !L.q;
   if (L.q) return h('div', { class: 'empty' }, h('div', { class: 'eic', html: Y.ic('search', 40) }), h('h2', { text: '검색 결과가 없어요' }));
@@ -181,12 +206,13 @@ function emptyState(trash) {
 }
 function bindItem(el, n, trash) {
   let t, moved = false, sx = 0, sy = 0;
-  el.addEventListener('pointerdown', e => { moved = false; sx = e.clientX; sy = e.clientY; el._lp = false; t = setTimeout(() => { if (!moved) { el._lp = true; Y.haptic(12); L.selecting = true; L.sel.add(n.id); renderBody(); } }, 500); });
+  el.addEventListener('pointerdown', e => { moved = false; sx = e.clientX; sy = e.clientY; el._lp = false; t = setTimeout(() => { if (!moved) { el._lp = true; L.lpAt = performance.now(); Y.haptic(12); L.selecting = true; L.sel.add(n.id); renderBody(); } }, 500); });
   el.addEventListener('pointermove', e => { if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 8) { moved = true; clearTimeout(t); } });
   ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => el.addEventListener(ev, () => clearTimeout(t)));
   el.addEventListener('contextmenu', e => { e.preventDefault(); });
   el.addEventListener('click', () => {
-    if (el._lp) { el._lp = false; return; }
+    // 길게 눌러 선택한 직후의 클릭은 무시 (목록이 다시 그려져 새 항목에 떨어지면 선택이 바로 풀렸음)
+    if (el._lp || performance.now() - (L.lpAt || 0) < 700) { el._lp = false; return; }
     if (L.selecting) { L.sel.has(n.id) ? L.sel.delete(n.id) : L.sel.add(n.id); if (!L.sel.size) L.selecting = false; renderBody(); return; }
     if (trash) { Y.toast('복원한 뒤 열 수 있어요'); return; }
     Y.openNote(n, el.querySelector('.cover'));
@@ -223,7 +249,7 @@ async function trashSel() {
 async function emptyTrash() {
   const ok = await Y.confirm({ title: '휴지통을 비울까요?', ok: '휴지통 비우기', danger: true });
   if (!ok) return;
-  Y.lib.notes.filter(n => n.trashed).forEach(n => ['n', 'q', 'qs'].forEach(k => Y.store.del('yeobaek.v2.' + k + '.' + n.id)));
+  Y.lib.notes.filter(n => n.trashed).forEach(Y.purge);
   Y.lib.notes = Y.lib.notes.filter(n => !n.trashed); Y.saveLib(); renderSide(); renderBody();
 }
 function movePop(anchor) {
@@ -287,13 +313,40 @@ Y.noteDoc = function (n) {
 const prepped = new WeakSet();
 Y.openNote = function (n, coverElm) {
   const rect = coverElm ? coverElm.getBoundingClientRect() : null;
+  if (n.kind === 'pdf') {
+    Y.blob.get(n.id).then(b => {
+      if (!b) { Y.toast('열 수 없어요'); return; }
+      return Y.openPdfData(new Uint8Array(b), n.title + '.pdf', n.key).then(doc => { doc.title = n.title; doc.libId = n.id; Y.enterEditor({ doc }); });
+    }).catch(() => Y.toast('열 수 없어요'));
+    return;
+  }
   if (n.kind === 'quiz' && !prepped.has(n)) { prepped.add(n); Y.prepQuiz(n).then(() => Y.openNote(n, coverElm)); return; }
   prepped.delete(n);
   const doc = n.kind === 'quiz' ? Y.quizDoc(n) : Y.noteDoc(n);
   if (!doc) { Y.toast('열 수 없어요'); return; }
   Y.enterEditor({ doc, rect, color: Y.coverColor(n.cover) });
+  // 문제지를 처음 열면 한 번: 첫 보기가 눌렸다 올라옴 (누를 수 있다는 단서, 글 없이)
+  if (n.kind === 'quiz' && !Y.store.get('yeobaek.v6.taphint', false)) {
+    Y.store.set('yeobaek.v6.taphint', true);
+    setTimeout(() => { const c = document.querySelector('.qlayer .qch .qcn'); if (c) { c.classList.add('nudge'); setTimeout(() => c.classList.remove('nudge'), 1400); } }, 900);
+  }
 
 };
+/* 가져온 PDF를 서재에 남김: 원본은 IndexedDB, 목록엔 첫 쪽 그림 표지. 같은 파일이면 같은 항목 */
+async function keepPdf(doc, bytes) {
+  let m = Y.lib.notes.find(n => n.kind === 'pdf' && n.key === doc.key && !n.trashed);
+  if (!m) {
+    const now = Date.now();
+    m = { id: Y.uid(), kind: 'pdf', title: doc.title, key: doc.key, cover: 'slate', folder: (L.view.startsWith && L.view.startsWith('f:')) ? L.view.slice(2) : null, fav: false, trashed: false, created: now, updated: now, pageCount: doc.pages.length };
+    try { await Y.blob.put(m.id, bytes); } catch (e) { Y.toast('저장 공간이 부족해요'); return; }
+    try { m.thumb = await Y.pdfCover(doc.pdf); } catch (e) {}
+    Y.lib.notes.unshift(m); Y.saveLib();
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  }
+  doc.libId = m.id; doc.title = m.title;
+  renderSide(); renderBody();
+}
+
 /* 여백에서 내보낸 PDF: 안에 첨부된 원본(yeobaek.ybq)으로 문제지·노트를 그대로 되살림 */
 async function fromPack(doc) {
   let att = null;
@@ -337,10 +390,12 @@ $('#libfile').addEventListener('change', e => {
   head.then(sig => {
     if (sig.trim().startsWith('{')) return asQuiz().catch(() => Y.toast('열 수 없는 파일이에요'));
     
-    Y.openPdfFile(f).then(async doc => {
+    let keep = null;
+    f.arrayBuffer().then(buf => { keep = buf.slice(0); return Y.openPdfData(new Uint8Array(buf), f.name, f.name + ':' + f.size); }).then(async doc => {
       Y.$('.toast') && Y.$('.toast').remove();
       const meta = await fromPack(doc);
       if (meta) { renderSide(); renderBody(); setTimeout(() => Y.openNote(meta), 150); return; }
+      await keepPdf(doc, keep);
       Y.enterEditor({ doc });
     })
       .catch(err => Y.toast('열 수 없는 파일이에요'));

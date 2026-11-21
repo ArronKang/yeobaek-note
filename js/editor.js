@@ -3,7 +3,8 @@
 'use strict';
 const h = Y.h, $ = Y.$;
 const E = Y.E = { tab: 'draw', sidebar: false, grid: false, collapsed: false, ratio: 0.5, vertical: false, primary: null };
-const TABS = [['home', 'Home', '홈'], ['insert', 'Insert', '삽입'], ['draw', 'Draw', '필기'], ['view', 'View', '보기']];
+// 삽입 탭은 안 되는 버튼뿐이라 없앰 (텍스트 상자는 필기 탭에 있음)
+const TABS = [['home', 'Home', '홈'], ['draw', 'Draw', '필기'], ['view', 'View', '보기']];
 const later = () => Y.toast('준비 중이에요');
 const MODE_NAME = { pen: '펜', eraser: '지우개' };
 
@@ -49,7 +50,7 @@ window.addEventListener('resize', () => {
 });
 
 /* =============== 탭 =============== */
-function tabLabel(t) { return Y.settings.tabLang === 'ko' ? t[2] : t[1]; }
+function tabLabel(t) { return t[2]; }   // 이름표(꾹 누르기)는 한국어
 const TAB_IC = { home: 'home', insert: 'insert', draw: 'draw', view: 'eye' };
 function renderTabs() {
   const tabs = $('#tabs');

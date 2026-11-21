@@ -158,7 +158,7 @@ async function deliver(file) {
     catch (e) { if (e && e.name === 'AbortError') return; }
   }
   const url = URL.createObjectURL(file);
-  const a = h('a', { href: url, download: file.name }); document.body.append(a); a.click(); a.remove();
+  const a = h('a', { href: url, download: file.name }); a.download = file.name; document.body.append(a); a.click(); setTimeout(() => a.remove(), 1000);
   setTimeout(() => URL.revokeObjectURL(url), 60000);
   Y.haptic(10);
   if (canShare) Y.toast('저장했어요', { action: '공유', onAction: () => navigator.share({ files: [file], title: file.name }).catch(() => {}) });

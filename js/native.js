@@ -37,6 +37,36 @@
   document.addEventListener('gesturestart', e => e.preventDefault());
   document.addEventListener('touchmove', e => { if (e.touches.length > 1 && !e.target.closest('.scroll')) e.preventDefault(); }, { passive: false });
 
+  /* ---------- 아이콘 이름표: 꾹 누르면 말풍선처럼 떠오르고, 그때 떼면 실행 안 함 ----------
+     글자 없는 아이콘의 뜻을 안전하게 확인하는 방법 (평소엔 글자 없음) */
+  const TIP = '.tool, .round, .ibtn, .tab, #handle';
+  let tipT = null, tipEl = null, tipBtn = null, tipX = 0, tipY = 0, swallow = false;
+  function hideTip() {
+    clearTimeout(tipT); tipT = null;
+    if (tipEl) { const t = tipEl; tipEl = null; t.classList.remove('in'); setTimeout(() => t.remove(), 180); }
+  }
+  document.addEventListener('pointerdown', e => {
+    hideTip(); swallow = false;
+    const b = e.target.closest && e.target.closest(TIP);
+    if (!b || e.button > 0) return;
+    const label = b.getAttribute('aria-label'); if (!label) return;
+    tipBtn = b; tipX = e.clientX; tipY = e.clientY;
+    tipT = setTimeout(() => {
+      const r = b.getBoundingClientRect();
+      tipEl = Y.h('div', { class: 'tip', role: 'tooltip', text: label });
+      document.getElementById('overlay').append(tipEl);
+      const w = tipEl.offsetWidth, below = r.top < 56;
+      tipEl.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+      tipEl.style.top = (below ? r.bottom + 8 : r.top - tipEl.offsetHeight - 8) + 'px';
+      tipEl.classList.toggle('below', below);
+      requestAnimationFrame(() => tipEl && tipEl.classList.add('in'));
+      swallow = true; Y.haptic(6);
+    }, 450);
+  }, true);
+  document.addEventListener('pointermove', e => { if (tipT && Math.hypot(e.clientX - tipX, e.clientY - tipY) > 10) { clearTimeout(tipT); tipT = null; } }, true);
+  ['pointerup', 'pointercancel'].forEach(t => document.addEventListener(t, () => { clearTimeout(tipT); tipT = null; if (tipEl) setTimeout(hideTip, 700); }, true));
+  document.addEventListener('click', e => { if (swallow && tipBtn && tipBtn.contains(e.target)) { e.stopPropagation(); e.preventDefault(); swallow = false; } }, true);
+
   /* ---------- 공부하는 동안 화면 안 꺼지게 ---------- */
   let lock = null;
   async function wake() {

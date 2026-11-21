@@ -3,27 +3,30 @@
 'use strict';
 const WORKER = new URL('vendor/pdfjs/pdf.worker.min.js', document.baseURI).href;
 
-Y.openPdfFile = function (file) {
-  return new Promise((resolve, reject) => {
-    if (!window.pdfjsLib) { reject(new Error('engine')); return; }
-    pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER;
-    const fr = new FileReader();
-    fr.onerror = () => reject(new Error('read'));
-    fr.onload = () => {
-      pdfjsLib.getDocument({ data: new Uint8Array(fr.result) }).promise.then(async pdf => {
-        const first = await pdf.getPage(1), v = first.getViewport({ scale: 1 }), ratio = v.height / v.width;
-        const key = file.name + ':' + file.size;
-        const saved = Y.store.get('yeobaek.v2.p.' + key, null);
-        const pages = [];
-        for (let i = 0; i < pdf.numPages; i++) {
-          const sp = saved && saved.pages && saved.pages[i];
-          pages.push({ ratio, tpl: 'blank', strokes: sp ? sp.strokes || [] : [], texts: sp ? sp.texts || [] : [] });
-        }
-        resolve({ id: 'p' + Y.uid(), type: 'pdf', title: file.name.replace(/\.pdf$/i, ''), key, pdf, pages });
-      }).catch(err => reject(err));
-    };
-    fr.readAsArrayBuffer(file);
+// data는 pdf.js가 작업자에게 넘겨 가져가므로, 저장할 거면 먼저 복사해 둘 것
+Y.openPdfData = function (data, name, key) {
+  if (!window.pdfjsLib) return Promise.reject(new Error('engine'));
+  pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER;
+  return pdfjsLib.getDocument({ data }).promise.then(async pdf => {
+    const first = await pdf.getPage(1), v = first.getViewport({ scale: 1 }), ratio = v.height / v.width;
+    const saved = Y.store.get('yeobaek.v2.p.' + key, null);
+    const pages = [];
+    for (let i = 0; i < pdf.numPages; i++) {
+      const sp = saved && saved.pages && saved.pages[i];
+      pages.push({ ratio, tpl: 'blank', strokes: sp ? sp.strokes || [] : [], texts: sp ? sp.texts || [] : [] });
+    }
+    return { id: 'p' + Y.uid(), type: 'pdf', title: name.replace(/\.pdf$/i, ''), key, pdf, pages };
   });
+};
+Y.openPdfFile = file => file.arrayBuffer().then(b => Y.openPdfData(new Uint8Array(b), file.name, file.name + ':' + file.size));
+
+// 서재 표지용 첫 쪽 그림 (작은 JPEG)
+Y.pdfCover = async function (pdf) {
+  const page = await pdf.getPage(1), v0 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: 240 / v0.width });
+  const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  return c.toDataURL('image/jpeg', 0.72);
 };
 
 Y.renderPdf = function (pg) {
