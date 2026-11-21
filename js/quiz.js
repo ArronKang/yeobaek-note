@@ -172,7 +172,11 @@ Y.quizLayer = function (doc, pg) {
     lp0 = { x: e.clientX, y: e.clientY };
     clearTimeout(lpT); lpT = setTimeout(() => { Y._lpAt = performance.now(); Y.haptic(15); Y.quizLongPress(pg, lp0.x, lp0.y); }, 450);
   });
-  lay.addEventListener('pointermove', e => { if (lp0 && Math.hypot(e.clientX - lp0.x, e.clientY - lp0.y) > 10) { clearTimeout(lpT); lp0 = null; } });
+  lay.addEventListener('pointermove', e => {
+    if (!lp0 || Math.hypot(e.clientX - lp0.x, e.clientY - lp0.y) <= 8) return;
+    clearTimeout(lpT); lp0 = null;
+    if (e.pointerType === 'touch' && !drag) Y.beginFingerScroll(pg, e);   // 보기 위에서 시작한 손가락 끌기 = 스크롤
+  });
   ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => lay.addEventListener(t, () => { clearTimeout(lpT); lp0 = null; }));
   return lay;
 };

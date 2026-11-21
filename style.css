@@ -629,3 +629,6 @@ img,svg,canvas{-webkit-user-drag:none;-webkit-touch-callout:none}
 .xbusy.in{opacity:1;filter:none}
 .xring{width:64px;height:64px;border-radius:50%;background:var(--g0);box-shadow:0 8px 28px rgba(33,37,41,.18);display:grid;place-items:center}
 .xring i{--k:.04;width:40px;height:40px;border-radius:50%;background:conic-gradient(var(--g6) calc(var(--k) * 360deg),var(--g2) 0);-webkit-mask:radial-gradient(circle,transparent 14px,#000 15px);mask:radial-gradient(circle,transparent 14px,#000 15px);transition:background .2s}
+
+/* 종이 위 버튼은 브라우저 스크롤 대신 앱이 직접 스크롤 (스크롤이 한 번씩 먹히던 문제) */
+.qch,.qno,.qbtn{touch-action:none}

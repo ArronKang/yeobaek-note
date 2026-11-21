@@ -589,6 +589,14 @@ function startLP(P, e, pg) {
     if (P.scrolling && P.scrolling.id === id) P.scrolling = null;
   }, 450);
 }
+// 문제지 보기·번호처럼 종이 위 버튼에서 시작한 손가락 끌기도 같은 방식으로 스크롤
+Y.beginFingerScroll = function (pg, e) {
+  const P = pg.pane; if (P.pinch || P.scrolling || Y.settings.finger) return false;
+  stopGlide(P); clearTimeout(P.lpT); P.lp = null;
+  P.scrolling = { id: e.pointerId, x0: e.clientX, y0: e.clientY, l0: P.scroll.scrollLeft, t0: P.scroll.scrollTop, hist: [[e.clientX, e.clientY, performance.now()]] };
+  try { pg.ink.setPointerCapture(e.pointerId); } catch (_) {}
+  return true;
+};
 function moveLP(e) {
   Y.panes.forEach(Q => { if (Q.lp && Q.lp.id === e.pointerId && Math.hypot(e.clientX - Q.lp.x, e.clientY - Q.lp.y) > 9) { clearTimeout(Q.lpT); Q.lp = null; } });
 }
