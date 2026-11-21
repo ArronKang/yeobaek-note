@@ -266,6 +266,7 @@ function drawStroke(ctx, st) {
   ctx.restore();
 }
 Y.drawStroke = drawStroke;
+Y.strokeGeom = { anc, segWidth };
 
 function bboxOf(list) {
   let x0 = 9, y0 = 9, x1 = -9, y1 = -9;

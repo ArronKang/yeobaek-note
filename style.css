@@ -623,3 +623,9 @@ html,body{touch-action:manipulation}
 /* 웹 흔적 없애기: 이미지 끌기·꾹 누름 메뉴, 손가락 탭 때 포커스 테두리 */
 img,svg,canvas{-webkit-user-drag:none;-webkit-touch-callout:none}
 :focus:not(:focus-visible){outline:none}
+
+/* 내보내기 진행: 가운데 고리가 차오름 */
+.xbusy{position:fixed;inset:0;z-index:90;display:grid;place-items:center;background:rgba(33,37,41,.18);opacity:0;filter:blur(var(--bl,8px));transition:opacity .26s var(--ease),filter .26s var(--ease);pointer-events:auto}
+.xbusy.in{opacity:1;filter:none}
+.xring{width:64px;height:64px;border-radius:50%;background:var(--g0);box-shadow:0 8px 28px rgba(33,37,41,.18);display:grid;place-items:center}
+.xring i{--k:.04;width:40px;height:40px;border-radius:50%;background:conic-gradient(var(--g6) calc(var(--k) * 360deg),var(--g2) 0);-webkit-mask:radial-gradient(circle,transparent 14px,#000 15px);mask:radial-gradient(circle,transparent 14px,#000 15px);transition:background .2s}

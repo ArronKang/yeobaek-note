@@ -432,7 +432,7 @@ Y.onActive = function (P) {
 $('#ic-share').innerHTML = Y.ic('share'); $('#ic-settings').innerHTML = Y.ic('settings'); $('#ic-full').innerHTML = Y.ic('collapse');
 $('#ic-back').innerHTML = Y.ic('back'); $('#ic-search').innerHTML = Y.ic('search');
 $('#btn-back').addEventListener('click', Y.closeEditor);
-$('#btn-share').addEventListener('click', () => Y.toast('내보내기는 앱 버전에서 지원해요'));
+$('#btn-share').addEventListener('click', () => Y.exportPdf());
 $('#btn-settings').addEventListener('click', () => Y.openSettings());
 function toggleChrome() {
   E.collapsed = !E.collapsed; Y.closePopover();
@@ -553,7 +553,7 @@ Y.openSettings = function () {
     row('햅틱 세기', segc('haptic', [['off', '끔'], ['mid', '보통'], ['strong', '강']]), '진동을 지원하는 기기에서 적용돼요'),
     h('h4', { text: '데이터' }),
     row('자동 저장 간격', segc('autosave', [[0, '즉시'], [1000, '1초'], [5000, '5초']])),
-    row('내보내기 위치', segc('exportDir', [['files', '파일'], ['share', '공유']]), '앱 버전에서 적용돼요'),
+    row('내보내기 위치', segc('exportDir', [['files', '파일'], ['share', '공유']]), '공유 버튼을 누르면 필기를 합친 PDF가 만들어져요'),
     row('휴지통 보관 기간', segc('trashDays', [[7, '7일'], [30, '30일'], [90, '90일']])));
   const m = Y.modal(body, { cls: 'sheet' });
 };

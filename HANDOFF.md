@@ -39,14 +39,14 @@
 - 순수 JS(프레임워크 없음), 전역 네임스페이스 `window.Y`, 빌드 단계 없음
 - 데이터는 전부 기기의 `localStorage` (업데이트해도 지워지지 않음)
 - PWA: `manifest.webmanifest`, `sw.js` (같은 출처는 cache-first)
-- 외부 라이브러리는 `vendor/`에 직접 포함: pdf.js 3.11.174, KaTeX 0.16.9
+- 외부 라이브러리는 `vendor/`에 직접 포함: pdf.js 3.11.174, KaTeX 0.16.9, pdf-lib 1.17.1, html2canvas 1.4.1 (뒤 둘은 내보낼 때만 불러옴)
 - 글꼴: Google Fonts (Noto Sans KR, Barlow Condensed, JetBrains Mono)
 
 ### 파일
 
 | 파일 | 역할 |
 |---|---|
-| `index.html` | 화면 뼈대. 스크립트 순서: katex → pdf.js → core → templates → engine → pdf → editor → quiz → samples → library → native |
+| `index.html` | 화면 뼈대. 스크립트 순서: katex → pdf.js → core → templates → engine → pdf → editor → quiz → samples → library → export → native |
 | `style.css` | 전체 스타일. 회색 토큰, 라이트/다크(`html[data-theme]`), 문제지 스타일, 맨 아래에 블러 애니메이션·고정 페이지·밀어서 고르기 메뉴 |
 | `js/core.js` | 공통 도구(`Y.h`, `Y.$`, `Y.ic` 아이콘, `Y.store`), 설정, 펜 기본값, 표지 색 |
 | `js/engine.js` | 필기 엔진. 포인터 이벤트, 펜 압력, 손바닥 무시, 손가락 스크롤 관성, 핀치 줌, 꾹 누르기(`startLP`) |
@@ -54,6 +54,7 @@
 | `js/library.js` | 라이브러리 화면, 가져오기(`#libfile`: PDF·.ybq), 예제 문제지 넣기 |
 | `js/quiz.js` | .ybq 파싱·페이지 나누기·문항 그리기·정답 카드·채점 |
 | `js/samples.js` | 예제 문제지(영어·국어·통합과학·한국사). 수학 예제는 `quiz.js`의 `Y.QUIZ_SAMPLE` |
+| `js/export.js` | 공유 버튼 = 필기 합친 PDF 내보내기. PDF 문서는 원본 위에 필기를 벡터로(pdf-lib), 노트·문제지는 종이를 html2canvas 그림으로 + 줄·모눈·점은 벡터 + 필기 벡터. 설정 `exportDir`이 '공유'면 공유 시트, 아니면 파일 저장 |
 | `js/native.js` | 웹 흔적 없애기: 안드로이드 뒤로가기(팝오버→정답 카드→모달→편집 화면→사이드바 순으로 닫기), 꾹 누름 메뉴·끌기 차단, 편집 중 화면 꺼짐 방지(Wake Lock) |
 | `js/pdf.js`, `js/templates.js` | PDF 렌더링, 노트 종이 템플릿 |
 
