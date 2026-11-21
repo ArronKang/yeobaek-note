@@ -25,10 +25,10 @@ Y.enterEditor = function (o) {
     const r = o.rect, W = innerWidth, H = innerHeight, x = h('div', { class: 'xfer', style: 'background:' + (o.color || '#495057') + ';width:' + W + 'px;height:' + H + 'px' });
     $('#overlay').append(x);
     const from = 'translate(' + r.left + 'px,' + r.top + 'px) scale(' + (r.width / W) + ',' + (r.height / H) + ')';
-    const a = x.animate([{ transform: from, borderRadius: '24px', opacity: 1 }, { transform: 'none', borderRadius: '0px', opacity: 1 }],
+    const a = x.animate([{ transform: from, borderRadius: '24px', opacity: 1, filter: 'blur(10px)' }, { transform: 'none', borderRadius: '0px', opacity: 1, filter: 'blur(0px)' }],
       { duration: 460, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' });
     setTimeout(reveal, 300);
-    a.onfinish = () => { x.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: 'ease-out', fill: 'forwards' }).onfinish = () => x.remove(); };
+    a.onfinish = () => { x.animate([{ opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(14px)' }], { duration: 260, easing: 'ease-out', fill: 'forwards' }).onfinish = () => x.remove(); };
   } else { ed.classList.add('fade'); reveal(); }
   Y.haptic(8);
 };

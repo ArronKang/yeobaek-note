@@ -568,3 +568,31 @@ html,body{touch-action:manipulation}
 .qcard{max-height:calc(520 * var(--dp));overflow:auto;overscroll-behavior:contain}
 .qc-solh{margin-top:.9em;padding-top:.7em;border-top:1px solid var(--paper-line2);font-size:.82em;font-weight:600;letter-spacing:.04em;color:var(--paper-label)}
 .qch{-webkit-touch-callout:none}
+
+/* ===== 기본 애니메이션: 블러 페이드 ===== */
+:root{--bl:10px}
+.toast{filter:blur(var(--bl));transition:opacity .35s var(--ease),transform .45s var(--ease),filter .4s var(--ease)}
+.toast.in{filter:blur(0)}
+.backdrop{transition:opacity .3s var(--ease),-webkit-backdrop-filter .4s var(--ease),backdrop-filter .4s var(--ease)}
+.modal{filter:blur(var(--bl));transition:transform .42s var(--ease),filter .4s var(--ease)}
+.backdrop.in .modal{filter:blur(0)}
+.popover{filter:blur(var(--bl));transition:opacity .25s var(--ease),transform .36s var(--ease),filter .35s var(--ease)}
+.popover.in{filter:blur(0)}
+#editor{filter:blur(14px);transition:opacity .3s var(--ease),filter .4s var(--ease)}
+#editor.shown{filter:none;transition:opacity .3s var(--ease),filter .45s var(--ease)}
+#editor .pages{transition:opacity .35s var(--ease),filter .4s var(--ease);filter:none}
+#editor:not(.shown) .pages{filter:blur(12px)}
+@keyframes chromeIn{from{transform:translateY(-100%);filter:blur(var(--bl));opacity:0}}
+@keyframes swapIn{from{opacity:0;transform:translateY(-6px);filter:blur(8px)}}
+@keyframes trayUp{from{opacity:0;transform:translateY(10px) scale(.9);filter:blur(8px)}}
+#chip{filter:blur(8px);transition:opacity .35s var(--ease),transform .45s var(--ease),filter .35s var(--ease)}
+#chip.in{filter:blur(0)}
+#saved{filter:blur(6px);transition:opacity .3s,filter .3s}
+#saved.in{filter:blur(0)}
+.qcard{filter:blur(8px);transition:opacity .25s var(--ease),transform .4s var(--ease),filter .35s var(--ease)}
+.qcard.in{filter:blur(0)}
+@keyframes qpop{from{opacity:0;transform:scale(.7) rotate(-6deg);filter:blur(6px)}}
+.ptile+.pname,.pname{filter:blur(4px);transition:opacity .3s var(--ease),transform .35s var(--ease),filter .3s var(--ease)}
+.ptype.on .pname{filter:blur(0)}
+@media(max-width:900px){#scrim{-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}}
+@media(prefers-reduced-motion:reduce){.toast,.modal,.popover,#editor,#editor .pages,#chip,#saved,.qcard,.pname{filter:none!important}}
