@@ -611,7 +611,7 @@ function startLP(P, e, pg) {
 Y.beginFingerScroll = function (pg, e) {
   const P = pg.pane; if (P.pinch || P.scrolling || Y.settings.finger) return false;
   stopGlide(P); clearTimeout(P.lpT); P.lp = null;
-  P.scrolling = { id: e.pointerId, x0: e.clientX, y0: e.clientY, l0: P.scroll.scrollLeft, t0: P.scroll.scrollTop, hist: [[e.clientX, e.clientY, performance.now()]] };
+  P.scrolling = { id: e.pointerId, x0: e.clientX, y0: e.clientY, ts: performance.now(), l0: P.scroll.scrollLeft, t0: P.scroll.scrollTop, hist: [[e.clientX, e.clientY, performance.now()]] };
   try { pg.ink.setPointerCapture(e.pointerId); } catch (_) {}
   return true;
 };
@@ -823,6 +823,11 @@ function attachGestures(P) {
     if (penRecent() || isPalm(e)) return;
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (Y.settings.finger) return;
+    // 페이지 밖(책상, 페이지 사이, 마지막 페이지 아래)에서 시작한 손가락도 같은 스크롤로 → 어디서 당겨도 고무줄
+    if (touches.size === 1 && !P.scrolling && !(e.target.closest && e.target.closest('.ink, .qcard, .tbox, button, input'))) {
+      const pg = P.doc && (P.doc.pages[P.pageIdx] || P.doc.pages[0]);
+      if (pg && Y.beginFingerScroll(pg, e)) e.preventDefault();
+    }
     if (touches.size >= 2 && !P.pinch) {
       P.scrolling = null; stopGlide(P);
       const m = mid();

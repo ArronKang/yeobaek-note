@@ -44,6 +44,10 @@
     try { lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', () => { lock = null; }); } catch (e) { lock = null; }
   }
   function sleep() { if (lock) { lock.release().catch(() => {}); lock = null; } }
-  new MutationObserver(() => (editorOpen() ? wake() : sleep())).observe($('#editor'), { attributes: true, attributeFilter: ['class', 'hidden'] });
+  new MutationObserver(() => {
+    if (editorOpen()) wake(); else sleep();
+    // 필기 중에 받아 둔 새 버전은 라이브러리로 나왔을 때 적용
+    if (Y.reloadLater && $('#editor').hidden) { Y.reloadLater = false; setTimeout(() => location.reload(), 200); }
+  }).observe($('#editor'), { attributes: true, attributeFilter: ['class', 'hidden'] });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wake(); });
 })();

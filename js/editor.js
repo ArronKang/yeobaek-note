@@ -557,7 +557,10 @@ Y.openSettings = function () {
     h('h4', { text: '저장' }),
     row('자동 저장', segc('autosave', [[0, '즉시'], [1000, '1초'], [5000, '5초']])),
     row('내보내기', segc('exportDir', [['files', '파일'], ['share', '공유']])),
-    row('휴지통 보관', segc('trashDays', [[7, '7일'], [30, '30일'], [90, '90일']])));
+    row('휴지통 보관', segc('trashDays', [[7, '7일'], [30, '30일'], [90, '90일']])),
+    h('div', { class: 'sver' }));
+  // 맨 아래 작은 버전 표시 (새 버전이 들어왔는지 확인용)
+  if (window.caches) caches.keys().then(ks => { const v = ks.find(k => /^yeobaek-\d+$/.test(k)); const el = body.querySelector('.sver'); if (v && el) el.textContent = v.replace('yeobaek-', '').replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/, '$1.$2.$3 $4:$5'); }).catch(() => {});
   const m = Y.modal(body, { cls: 'page' });
 };
 })(window.Y);

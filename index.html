@@ -80,7 +80,20 @@
 <script>
 /* 설치형 앱: 서비스 워커로 오프라인 실행 (지원하지 않는 곳에서는 조용히 건너뜀) */
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      // 앱으로 돌아올 때마다 새 버전 확인
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+    }).catch(() => {});
+  });
+  // 새 버전이 들어오면: 막 켠 참이거나 라이브러리에 있으면 바로, 필기 중이면 라이브러리로 나갈 때 바꿈
+  let swapped = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (swapped) return;
+    const ed = document.getElementById('editor');
+    if (performance.now() < 8000 || ed.hidden) { swapped = true; location.reload(); }
+    else window.Y && (Y.reloadLater = true);
+  });
 }
 </script>
 </body>
