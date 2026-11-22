@@ -29,10 +29,21 @@ class FrontInk(ctx: Context) {
     private var renderer: CanvasFrontBufferedRenderer<Seg>? = null
     var ok = false; private set
     @Volatile private var dirty = false
+    /** 마지막으로 지운 뒤 아무것도 안 그렸음 (화면이 움직일 때마다 지우기 반복 방지) */
+    private var cleared = false
     /** 펜을 뗐을 때 여러 버퍼 층에 그릴 최종 획 */
     @Volatile private var final: Seg? = null
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private val clearRun = Runnable { clearNow() }
+
+    init {
+        // 표면이 다시 만들어지면(탭 전환·홈 다녀오기) 예전 획이 남지 않게 비움
+        surface.holder.addCallback(object : android.view.SurfaceHolder.Callback {
+            override fun surfaceCreated(h: android.view.SurfaceHolder) { main.post { dirty = false; final = null; cleared = true; renderer?.clear() } }
+            override fun surfaceChanged(h: android.view.SurfaceHolder, f: Int, w: Int, hh: Int) {}
+            override fun surfaceDestroyed(h: android.view.SurfaceHolder) { main.removeCallbacks(clearRun); dirty = false; final = null }
+        })
+    }
 
     fun attach() {
         if (renderer != null) return
@@ -57,22 +68,24 @@ class FrontInk(ctx: Context) {
         val r = renderer ?: return
         // 앞 획을 아직 겹쳐 두고 있으면 먼저 지움 (아래 화면은 이미 그렸음)
         if (final != null) clearNow()
-        dirty = true; r.renderFrontBufferedLayer(seg)
+        dirty = true; cleared = false; r.renderFrontBufferedLayer(seg)
     }
 
     /** 펜을 뗌: 앞 버퍼 내용을 여러 버퍼 층으로 넘기면서 최종 모양으로 (한 번에 바뀜) */
     fun finish(seg: Seg) {
         val r = renderer ?: return
-        final = seg; r.commit()
+        final = seg; cleared = false; r.commit()
         main.removeCallbacks(clearRun); main.postDelayed(clearRun, 250)
     }
 
     /** 몇 프레임 뒤 지움 (모양 보정 등) */
     fun clearSoon() { main.removeCallbacks(clearRun); main.postDelayed(clearRun, 120) }
 
-    fun clearNow() {
+    fun clearNow(force: Boolean = false) {
         main.removeCallbacks(clearRun)
-        if (!dirty && final == null) return
+        if (!force && !dirty && final == null) return
+        if (force && !dirty && final == null && cleared) return
+        cleared = true
         dirty = false; final = null; renderer?.clear()
     }
     fun clear() = clearNow()

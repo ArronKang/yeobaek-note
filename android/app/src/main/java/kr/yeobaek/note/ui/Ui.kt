@@ -159,6 +159,7 @@ private fun PopoverBox(spec: PopSpec) {
     var size by remember(spec) { mutableStateOf(IntSize.Zero) }
     var screen by remember { mutableStateOf(IntSize.Zero) }
     val a = remember(spec) { Animatable(0f) }
+    val opened = remember(spec) { System.currentTimeMillis() }
     LaunchedEffect(spec) { a.animateTo(1f, tween(320, easing = Spring)) }
     Box(Modifier.fillMaxSize().onSizeChanged { screen = it }
         .pointerInput(spec) {
@@ -168,6 +169,8 @@ private fun PopoverBox(spec: PopSpec) {
                     val e = awaitPointerEvent(PointerEventPass.Initial)
                     val ch = e.changes.firstOrNull { it.pressed && !it.previousPressed } ?: continue
                     val r = Rect(popPos(spec, size, screen, d, insT, insB).toOffset(), androidx.compose.ui.geometry.Size(size.width.toFloat(), size.height.toFloat()))
+                    // S Pen으로 톡 하면 닿음이 두 번 잡혀 열리자마자 닫히던 것: 연 직후 같은 버튼에 다시 닿은 건 무시
+                    if (System.currentTimeMillis() - opened < 300 && spec.anchor.inflate(12f).contains(ch.position)) { ch.consume(); continue }
                     if (!r.contains(ch.position)) { ch.consume(); Overlay.closePop() }
                 }
             }

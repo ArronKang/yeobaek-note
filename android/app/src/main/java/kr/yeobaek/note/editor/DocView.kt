@@ -323,6 +323,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     /* =============== 그리기 =============== */
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
+    private var lastView = FloatArray(0)
 
     override fun onDraw(cv: Canvas) {
         val c = Paper.c()
@@ -330,6 +331,10 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         cv.clipRect(0f, 0f, width.toFloat(), height.toFloat())
         cv.drawColor(c.desk)
         if (tops.size != doc.pages.size) layoutTops()
+        // 화면이 움직였는데(스크롤·확대·핀치) 저지연 층에 획이 남아 있으면 지움: 안 지우면 화면에 붙은 채 남음
+        val pc0 = pinch
+        val vk = floatArrayOf(sx, sy, W, if (pc0 != null && pc0.moved) pc0.s else 1f, if (pc0 != null && pc0.moved) pc0.ty else 0f)
+        if (!vk.contentEquals(lastView)) { lastView = vk; if (cur?.st == null) front?.clearNow(force = true) }
         cv.save()
         pinch?.let { pc -> if (pc.moved) { cv.translate(pc.tx, pc.ty); cv.scale(pc.s, pc.s, pc.mx, pc.my) } }
         val left = pageLeft()
@@ -351,12 +356,13 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         }
         // 확대했을 때: 멈추면 보이는 부분을 화면 해상도로 다시 그린 것을 덮음
         val sharpOk = pinch == null && pullV == 0f && bornPage < 0 && keep.any { rsFor(it) < 0.999f }
+        sharpOver = false
         if (sharpOk) {
             val sb = sharp
-            if (sb != null && sharpKey == sharpKeyNow()) cv.drawBitmap(sb, 0f, 0f, null)
+            if (sb != null && sharpKey == sharpKeyNow()) { cv.drawBitmap(sb, 0f, 0f, null); sharpOver = true }
             else {
                 // 스크롤만 했으면 이전 선명 그림을 그만큼 옮겨서 (흐려졌다 선명해지는 깜박임 줄이기)
-                if (sb != null && sharpBaseAt == sharpBase()) cv.drawBitmap(sb, sharpSx - sx, sharpSy - sy, null)
+                if (sb != null && sharpBaseAt == sharpBase()) { cv.drawBitmap(sb, sharpSx - sx, sharpSy - sy, null); sharpOver = true }
                 scheduleSharp()
             }
         }
@@ -393,6 +399,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
 
     /* ---------- 확대 선명화 ---------- */
     var sharpGen = 0
+    /** 이번 프레임에 선명 그림이 페이지를 덮었음 → 쓰는 중인 획은 캐시에 구운 부분까지 위에 다시 그려야 보임 */
+    private var sharpOver = false
     private var sharp: Bitmap? = null
     private var sharpKey = ""
     private val sharpJobs = ArrayList<PdfSource.Job>()
@@ -473,7 +481,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         } } }
         val cu = cur
         if (cu != null && cu.pi == i) {
-            cu.st?.let { st -> if (st.t == "hl" || !cu.liveBaked) Ink.draw(cv, st, K, dark) else Ink.draw(cv, st, K, dark, from = cu.baked) }
+            cu.st?.let { st -> if (st.t == "hl" || !cu.liveBaked || sharpOver) Ink.draw(cv, st, K, dark) else Ink.draw(cv, st, K, dark, from = cu.baked) }
             cu.pred?.let { Ink.draw(cv, it, K, dark) }
             cu.lasso?.let { pts ->
                 p.reset(); p.isAntiAlias = true; p.style = Paint.Style.STROKE; p.strokeWidth = dp(1.6f); p.color = c.acc; p.strokeJoin = Paint.Join.ROUND
@@ -768,6 +776,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         var erased = false
         var jumps = 0
         var frontTo = 0
+        /** 시작점에서 가장 멀리 간 거리(화면 px): 톡/꾹 누르기와 글씨를 가름 (끝점만 보면 동그라미가 톡으로 잡혀 씹혔음) */
+        var far = 0f
         val touched = ArrayList<Stroke>()
         var lastX = 0f; var lastY = 0f
     }
@@ -828,7 +838,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     private fun down(ev: MotionEvent, i: Int) {
         val id = ev.getPointerId(i); val x = ev.getX(i); val y = ev.getY(i); val tool = toolOf(ev, i)
         host.onAnyDown()
-        front?.clearNow()
+        // 손바닥이 닿을 때는 저지연 층을 건드리지 않음 (쓰는 중인 획이 사라져 보였음)
+        if (tool != "touch" || !(penRecent() || isPalm(ev, i))) front?.clearNow()
         if (tool == "pen") {
             penDown = true; lastPen = SystemClock.uptimeMillis(); haltFingers()
             // 펜보다 먼저 닿은 손바닥이 그린 획은 지움
@@ -947,6 +958,9 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             eraseAt(c, norm(c.pi, x, y)); return
         }
         val st = c.st ?: return
+        c.far = max(c.far, hypot(x - c.x0, y - c.y0))
+        // 펜이 조금이라도 글씨처럼 움직이면 꾹 누르기 취소 (작은 글씨가 정답 카드로 바뀌며 씹혔음)
+        if (lpId == c.id && c.far > dp(3f) && ev.getToolType(i) == MotionEvent.TOOL_TYPE_STYLUS) cancelLP()
         if (c.snapped) return
         val isPen = ev.getToolType(i) == MotionEvent.TOOL_TYPE_STYLUS
         fun addPt(px: Float, py: Float, pr: Float) {
@@ -970,9 +984,12 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             val n = st.p.size
             if (n >= 2 && c.frontTo < n - 1) {
                 val snap = Stroke(st.t, st.c, st.s, st.a, st.k, ArrayList(st.p)).also { it.live = true }
-                front!!.draw(FrontInk.Seg(snap, c.frontTo, n - 1, pageLeft(), pageTop(c.pi), W, Paper.c().dark && doc.type != "pdf", ev.eventTime))
+                // 처음부터 다시 그림: 이 기기는 앞 버퍼가 두 장을 번갈아 써서, 새 마디만 그리면 한 장씩 빠진 조각이 깜박였음
+                front!!.draw(FrontInk.Seg(snap, 0, n - 1, pageLeft(), pageTop(c.pi), W, Paper.c().dark && doc.type != "pdf", ev.eventTime))
                 c.frontTo = n - 1
             }
+            // 아래 화면도 같이 따라 그려 둠: 저지연 층이 지워지는 순간에도 획이 비지 않게 (쓰는 중·뗀 직후 깜박임, 펜 먹힘처럼 보이던 것)
+            invalidate()
             main.removeCallbacks(snapRun)
             if (YY.settings.snap && st.p.size > 8) main.postDelayed(snapRun, 600)
             return
@@ -1074,7 +1091,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             }
             c.st != null -> {
                 val st = c.st!!
-                if (!cancel && doc.type == "quiz" && SystemClock.uptimeMillis() - c.t0 < 350 && hypot(x - c.x0, y - c.y0) < dp(8f) && quizTap(c.pi, c.x0, c.y0)) {
+                if (!cancel && doc.type == "quiz" && SystemClock.uptimeMillis() - c.t0 < 350 && c.far < dp(8f) && hypot(x - c.x0, y - c.y0) < dp(8f) && quizTap(c.pi, c.x0, c.y0)) {
                     // 보기 위를 톡: 점은 지우고 고르기로
                     dirty(c.pi)
                 } else if (cancel && st.p.size < 3) { dirtyStrokes(c.pi, listOf(st)) }
