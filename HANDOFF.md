@@ -205,3 +205,19 @@ Playwright(파이썬)로 800×1280, device_scale_factor 2 화면에서 확인해
 - **원칙은 그대로**: 2번 항목(회색 팔레트, 아이콘만, 감속 곡선, 장식·설명 문구 금지, 꾹 누르기 등)을 네이티브에서도 똑같이 지킨다. 색·곡선 값은 `style.css` 토큰을 그대로 옮긴다.
 - **데이터**: 웹은 `localStorage`, 네이티브는 별도 저장소. `.ybq` 형식(4번)은 양쪽이 같은 파일을 열 수 있게 그대로 유지한다.
 - **시작 방법**: PC에서 clone 후 이 브랜치 체크아웃 → `claude` 실행 → "HANDOFF.md 11번대로 android/ 뼈대(Compose + 필기 캔버스)부터 만들어 줘".
+
+### 11-1. 네이티브 진행 상황 (2026-11-22)
+
+`android/`에 Kotlin + Compose 앱이 생겼어요. 빌드: `cd android && ./gradlew assembleDebug` (JDK는 Android Studio에 든 JBR, compileSdk 37, AGP 9.4.1, Kotlin 2.4.10).
+
+| 파일 | 역할 (웹 대응) |
+|---|---|
+| `editor/DocView.kt` | 필기 엔진 (engine.js + pull.js): 페이지 캐시 비트맵, 관성 스크롤, 고무줄·새 페이지, 핀치, 두/세 손가락 톡 실행취소/다시실행, 펜·형광펜·지우개(획/부분)·올가미(이동·크기·복사·색·삭제)·공간 삽입·글상자, 모양 보정, 손바닥 무시, S Pen 버튼, 예측 획, 문제지 톡·꾹 누르기 |
+| `editor/Editor.kt` | 편집 화면: 유리 상단 2줄(위로 끌어 숨기기), 탭(홈·필기·보기), 도구, 펜 트레이·펜 팝업, 문서 탭, 페이지 사이드바, 정답 카드(밀어서 고르기·펜 호버), 정답표, 페이지 칩, PDF 검색(안드로이드 15+) |
+| `quiz/QuizLayout.kt`, `Tex.kt`, `Quiz.kt` | .ybq 배치(560×792 고정), 수식(KaTeX 대신 JLaTeXMath), 채점·오답 문제지·초기화 |
+| `library/Library.kt` | 서재: 사이드바/보기 바, 표지·목록, 검색, 정렬, 선택 모드, 폴더, 휴지통, 새 노트 창 |
+| `pdf/PdfSource.kt`, `export/Export.kt` | PDF 보기(PdfRenderer), 필기 합친 PDF 내보내기(파일 저장 또는 공유) |
+| `data/` | 저장: 앱 내부 파일 `files/yb/` (웹 localStorage 키와 같은 이름 구조, 획 JSON 모양 같음) |
+| `src/test/RenderTest.kt` | 기기 없이 페이지를 그림으로 뽑는 테스트 → `app/build/shots/` (`./gradlew testDebugUnitTest`) |
+
+아직 안 한 것: 화면 분할, 격자 보기, PDF 목차(안드로이드 PdfRenderer에 없음, 북마크만), 형광펜 글자 맞춤, 플래너 링크, 내보낸 PDF 안 원본 첨부(되살리기). 실기기(갤럭시 탭) 확인 전이라 S Pen 호버·손맛은 조정이 필요할 수 있어요.

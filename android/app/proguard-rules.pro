@@ -1,0 +1,7 @@
+-keepattributes *Annotation*, InnerClasses
+-keepclassmembers class kotlinx.serialization.json.** { *** Companion; }
+-keep,includedescriptorclasses class kr.yeobaek.note.**$$serializer { *; }
+-keepclassmembers class kr.yeobaek.note.** { *** Companion; kotlinx.serialization.KSerializer serializer(...); }
+-keep class org.scilab.forge.jlatexmath.** { *; }
+-dontwarn java.awt.**
+-dontwarn javax.swing.**
