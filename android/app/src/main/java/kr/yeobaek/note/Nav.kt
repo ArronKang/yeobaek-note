@@ -52,12 +52,16 @@ object Nav {
     fun closeTab(t: OpenDoc) {
         val i = tabs.indexOf(t); if (i < 0) return
         tabs.removeAt(i)
-        if (t.doc.type == "pdf") t.doc.pdf?.close()
+        if (t.doc.type == "pdf" && !shared(t.doc)) t.doc.pdf?.close()
         if (cur === t) {
             val next = tabs.getOrNull(i) ?: tabs.getOrNull(i - 1)
             if (next != null) { cur = next; editorRev++ } else closeEditor()
         }
     }
+
+    /** 화면 분할 칸에서도 쓰고 있는 문서인지 */
+    var splitDoc: Doc? = null
+    fun shared(d: Doc) = splitDoc === d || tabs.any { it.doc === d }
 
     fun closeEditor() { Overlay.closePop(); inEditor = false; Y.libRev++ }
 
@@ -97,6 +101,8 @@ object Nav {
 
     /** 탭으로 열지 않고 문서만 (화면 분할용) */
     fun load(n: NoteMeta, cb: (Doc?) -> Unit) {
+        // 이미 탭으로 열려 있으면 같은 문서를 씀 (두 벌이면 나중에 저장한 쪽이 덮어써서 필기가 사라짐)
+        tabs.find { it.doc.id == n.id || (n.kind == "pdf" && it.doc.libId == n.id) }?.let { cb(it.doc); return }
         busy = true
         scope.launch {
             val d = withContext(Dispatchers.IO) {

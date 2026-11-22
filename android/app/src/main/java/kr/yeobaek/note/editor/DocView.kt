@@ -187,12 +187,17 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     private fun dropCaches() {
         caches.values.forEach { it.bm.recycle() }; caches.clear()
     }
-    fun dirty(pi: Int) { caches[pi]?.dirty = true; sharpGen++; invalidate() }
-    fun dirtyAll() { caches.values.forEach { it.dirty = true }; sharpGen++; invalidate() }
+    /** 쪽마다 바뀐 횟수 (사이드바 썸네일을 바뀐 쪽만 새로 만들게) */
+    private val ver = java.util.IdentityHashMap<Page, Int>()
+    fun verOf(pg: Page) = ver[pg] ?: 0
+    private fun bump(pi: Int) { doc.pages.getOrNull(pi)?.let { ver[it] = verOf(it) + 1 } }
+    fun dirty(pi: Int) { caches[pi]?.dirty = true; sharpGen++; bump(pi); invalidate() }
+    fun dirtyAll() { caches.values.forEach { it.dirty = true }; sharpGen++; doc.pages.indices.forEach(::bump); invalidate() }
     /** 정규화 사각형(x0,y0,x1,y1, 페이지 너비 기준)만 다시 그림: 획 하나 바뀔 때 페이지 전체를 다시 그리지 않게 */
-    fun dirtyRect(pi: Int, b: FloatArray, pad: Float = 0.01f) {
+    fun dirtyRect(pi: Int, b: FloatArray, pad: Float = 0.01f, keepSharp: Boolean = false) {
+        bump(pi)
         val c = caches[pi] ?: return invalidate()
-        sharpGen++
+        if (!keepSharp) sharpGen++
         if (c.dirty) { invalidate(); return }
         val K = c.bm.width.toFloat()
         val r = RectF((b[0] - pad) * K - 2, (b[1] - pad) * K - 2, (b[2] + pad) * K + 2, (b[3] + pad) * K + 2)
@@ -200,6 +205,17 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         invalidate()
     }
     private fun dirtyStrokes(pi: Int, list: Collection<Stroke>) { if (list.isEmpty()) return; dirtyRect(pi, Ink.bbox(list.toList())) }
+    /** 획 하나를 더함: 캐시는 그 자리만, 확대 선명 그림에는 바로 덧그려서 흐려졌다 돌아오는 깜박임 없게 */
+    private fun addedStroke(pi: Int, st: Stroke) {
+        val sb = sharp
+        val ok = sb != null && sharpKey == sharpKeyNow()
+        dirtyRect(pi, Ink.bbox(listOf(st)), keepSharp = ok)
+        if (ok) {
+            val cv = Canvas(sb!!); cv.save(); cv.translate(pageLeft(), pageTop(pi))
+            Ink.draw(cv, st, W, Paper.c().dark && doc.type != "pdf"); cv.restore()
+            sharpKey = sharpKeyNow()
+        }
+    }
     fun themeChanged() { QuizLayout.clearCache(); textCache.clear(); dirtyAll() }
 
     private fun rsFor(i: Int): Float = min(1f, min(3600f / W, 4096f / pageH(i)))
@@ -309,8 +325,16 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             cv.restore()
         }
         // 확대했을 때: 멈추면 보이는 부분을 화면 해상도로 다시 그린 것을 덮음
-        val sharpOk = cur == null && pinch == null && pullV == 0f && bornPage < 0 && keep.any { rsFor(it) < 0.999f }
-        if (sharpOk) { val sb = sharp; if (sb != null && sharpKey == sharpKeyNow()) cv.drawBitmap(sb, 0f, 0f, null) else scheduleSharp() }
+        val sharpOk = pinch == null && pullV == 0f && bornPage < 0 && keep.any { rsFor(it) < 0.999f }
+        if (sharpOk) {
+            val sb = sharp
+            if (sb != null && sharpKey == sharpKeyNow()) cv.drawBitmap(sb, 0f, 0f, null)
+            else {
+                // 스크롤만 했으면 이전 선명 그림을 그만큼 옮겨서 (흐려졌다 선명해지는 깜박임 줄이기)
+                if (sb != null && sharpBaseAt == sharpBase()) cv.drawBitmap(sb, sharpSx - sx, sharpSy - sy, null)
+                scheduleSharp()
+            }
+        }
         for (i in keep.sorted()) drawOverlay(cv, i, left, pageTop(i))
         // (페이지 추가 버튼은 숨김: 고무줄로 당겨서)
         if (false && doc.type == "note" && doc.pages.isNotEmpty()) {
@@ -347,6 +371,9 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     private var sharpKey = ""
     private val sharpJobs = ArrayList<PdfSource.Job>()
     private fun sharpKeyNow() = "${sx.roundToInt()}|${sy.roundToInt()}|${W.roundToInt()}|$sharpGen|${Paper.c().dark}|${width}x$height"
+    /** 위치를 뺀 열쇠: 같으면 스크롤만 한 것 → 이전 선명 그림을 옮겨 그릴 수 있음 */
+    private fun sharpBase() = "${W.roundToInt()}|$sharpGen|${Paper.c().dark}|${width}x$height"
+    private var sharpBaseAt = ""; private var sharpSx = 0f; private var sharpSy = 0f
     private val sharpRun = Runnable { buildSharp() }
     private fun scheduleSharp() { main.removeCallbacks(sharpRun); main.postDelayed(sharpRun, 160) }
     private fun busy() = scrolling != null || glideRun != null || pinch != null || springRun != null || cur != null
@@ -376,7 +403,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
                 renderPage(cv, i, W, 1f, exclude = sel?.takeIf { it.pi == i }?.strokes, pdf = null, bg = doc.type != "pdf")
                 cv.restore()
             }
-            sharpKey = key; invalidate()
+            sharpKey = key; sharpBaseAt = sharpBase(); sharpSx = sx; sharpSy = sy; invalidate()
         }
         val src = doc.pdf
         if (doc.type != "pdf" || src == null) { compose(emptyMap()); return }
@@ -1026,7 +1053,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
                 else {
                     st.live = false; c.pred = null
                     pg.strokes.add(st)
-                    dirtyStrokes(c.pi, listOf(st))
+                    addedStroke(c.pi, st)
                     pushHist(c.pi, { pg.strokes.remove(st) }, { pg.strokes.add(st) }) { Ink.bbox(listOf(st)) }
                     if (c.snapped) { val oldP = c.snapOld!!; val newP = st.p; hist.add(Entry(pg, { st.p = oldP }, { st.p = newP })) }
                 }

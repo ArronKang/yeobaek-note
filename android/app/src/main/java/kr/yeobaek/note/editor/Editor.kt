@@ -214,10 +214,10 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
     val hostR = remember(open) { hostFor(true) }
     // 분할을 끝내면 오른쪽 문서 정리
     fun endSplit() {
-        val r = ed.right; ed.split?.let { sd -> r?.saveNow(); if (sd.type == "pdf") sd.pdf?.close() }
+        val r = ed.right; ed.split?.let { sd -> r?.saveNow(); Nav.splitDoc = null; if (sd.type == "pdf" && !Nav.shared(sd)) sd.pdf?.close() }
         ed.split = null; ed.ratio = .5f; ed.view = ed.left; ed.rev++; Y.haptic(10)
     }
-    SplitCtl.start = { d2 -> ed.split?.let { endSplit() }; ed.split = d2; ed.ratio = .5f; Y.haptic(10) }
+    SplitCtl.start = { d2 -> ed.split?.let { endSplit() }; ed.split = d2; Nav.splitDoc = d2; ed.ratio = .5f; Y.haptic(10) }
     SplitCtl.end = { endSplit() }
 
     Box(Modifier.fillMaxSize().background(Color(Paper.c().desk))) {
@@ -722,7 +722,7 @@ private fun PageSidebar(ed: Ed, doc: Doc, statusTop: androidx.compose.ui.unit.Dp
         LazyColumn(state = st, contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             itemsIndexed(doc.pages.toList(), key = { i, p -> System.identityHashCode(p) * 31 + i }) { i, pg ->
                 val wpx = with(d) { 116.dp.roundToPx() }
-                val bm = remember(pg, ed.rev, Y.setRev, i) { if (i < doc.pages.size) runCatching { v.thumb(i, wpx) }.getOrNull() else null }
+                val bm = remember(pg, v.verOf(pg), Y.setRev, i) { if (i < doc.pages.size) runCatching { v.thumb(i, wpx) }.getOrNull() else null }
                 var bounds by remember { mutableStateOf(Rect.Zero) }
                 Column(Modifier.onGloballyPositioned { bounds = it.boundsInRoot() }
                     .pointerInput(i, doc.type) {

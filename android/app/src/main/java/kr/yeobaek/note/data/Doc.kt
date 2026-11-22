@@ -45,6 +45,8 @@ object Docs {
     fun save(doc: Doc) {
         when (doc.type) {
             "note", "quiz" -> {
+                // 서재에서 지운 뒤 늦게 도착한 저장은 버림 (안 그러면 목록에 없는 파일이 다시 생김)
+                if (Y.lib.notes.none { it.id == doc.id }) return
                 val pages = doc.pages.map { p -> Page(p.ratio, p.tpl, p.strokes, p.texts, p.qi, p.head) }.toMutableList()
                 if (!Store.set("n/${doc.id}.json", NoteData.serializer(), NoteData(pages, doc.lv))) return
                 Y.lib.notes.find { it.id == doc.id }?.let { it.title = doc.title; it.updated = System.currentTimeMillis(); it.pageCount = pages.size; Y.saveLib() }
