@@ -17,12 +17,13 @@ import java.util.concurrent.atomic.AtomicInteger
 class PdfSource private constructor(val file: File, private val pfd: ParcelFileDescriptor, private val r: PdfRenderer) {
     val count = r.pageCount
     val ratios = FloatArray(count)
+    val widths = FloatArray(count)
     private val exec = Executors.newSingleThreadExecutor { Thread(it, "pdf").apply { priority = Thread.NORM_PRIORITY - 1 } }
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var closed = false
 
     init {
-        for (i in 0 until count) r.openPage(i).use { ratios[i] = if (it.width > 0) it.height.toFloat() / it.width else 1.4142f }
+        for (i in 0 until count) r.openPage(i).use { widths[i] = it.width.toFloat(); ratios[i] = if (it.width > 0) it.height.toFloat() / it.width else 1.4142f }
     }
 
     class Job { val token = AtomicInteger(0); fun cancel() { token.incrementAndGet() } }
@@ -33,6 +34,24 @@ class PdfSource private constructor(val file: File, private val pfd: ParcelFileD
         exec.execute {
             if (closed || job.token.get() != t) return@execute
             val bm = runCatching { renderNow(i, wPx) }.getOrNull() ?: return@execute
+            main.post { if (job.token.get() == t && !closed) cb(bm) else bm.recycle() }
+        }
+        return job
+    }
+
+    /** 확대했을 때: 쪽 너비 pageW(픽셀)로 볼 때의 clip 부분만 선명하게 */
+    fun renderRegion(i: Int, pageW: Float, clip: android.graphics.RectF, cb: (Bitmap) -> Unit): Job {
+        val job = Job(); val t = job.token.get()
+        exec.execute {
+            if (closed || job.token.get() != t) return@execute
+            val bm = runCatching {
+                val w = clip.width().toInt().coerceIn(1, 4096); val h = clip.height().toInt().coerceIn(1, 4096)
+                val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); b.eraseColor(Color.WHITE)
+                val k = pageW / widths[i].coerceAtLeast(1f)
+                val m = android.graphics.Matrix().apply { setScale(k, k); postTranslate(-clip.left, -clip.top) }
+                r.openPage(i).use { it.render(b, null, m, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY) }
+                b
+            }.getOrNull() ?: return@execute
             main.post { if (job.token.get() == t && !closed) cb(bm) else bm.recycle() }
         }
         return job

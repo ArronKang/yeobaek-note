@@ -10,10 +10,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
@@ -124,15 +127,22 @@ class Ed {
     var edit by mutableStateOf<TextEdit?>(null)
     var view by mutableStateOf<DocView?>(null)
     var chromeH by mutableFloatStateOf(0f)
+    /** 화면 분할: 오른쪽(세로 화면이면 아래) 문서 */
+    var split by mutableStateOf<Doc?>(null)
+    var ratio by mutableFloatStateOf(.5f)
+    var left: DocView? = null
+    var right: DocView? = null
+    /** 지금 손댄 쪽의 문서 (도구가 그 쪽에 적용) */
+    val adoc: Doc? get() = view?.doc
 }
-class Card(val pi: Int, val idx: Int, val x: Float, val y: Float, val press: Boolean) {
+class Card(val v: DocView, val pi: Int, val idx: Int, val x: Float, val y: Float, val press: Boolean) {
     var hot by mutableStateOf<String?>(null)
     var dragging = press
     var hover = false; var seen = false
     val acts = HashMap<String, Rect>()
     var bounds = Rect.Zero
 }
-class TextEdit(val pi: Int, val t: TextBox, val isNew: Boolean)
+class TextEdit(val v: DocView, val pi: Int, val t: TextBox, val isNew: Boolean)
 
 object EditorBack {
     var handler: (() -> Boolean)? = null
@@ -147,7 +157,7 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
     var closeJob by remember { mutableStateOf<Job?>(null) }
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
 
-    fun closeCard() { ed.card = null; ed.view?.setCard(-1, -1) }
+    fun closeCard() { ed.card?.v?.setCard(-1, -1); ed.card = null }
 
     // 안드로이드 뒤로가기: 팝오버 → 정답 카드 → 글상자 → 사이드바 → 편집 화면
     DisposableEffect(open) {
@@ -155,70 +165,128 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
             when {
                 Overlay.closePop() -> true
                 ed.card != null -> { closeCard(); true }
-                ed.edit != null -> { val e = ed.edit!!; ed.edit = null; ed.view?.commitText(e.pi, e.t, e.isNew); true }
+                ed.edit != null -> { val e = ed.edit!!; ed.edit = null; e.v.commitText(e.pi, e.t, e.isNew); true }
                 ed.sidebar -> { ed.sidebar = false; true }
+                ed.split != null -> { SplitCtl.end(); true }
                 else -> false
             }
         }
         onDispose { EditorBack.handler = null }
     }
 
-    val host = remember(open) {
-        object : DocView.Host {
-            override fun onPage(n: Int, changed: Boolean) { if (changed) { ed.page = n; ed.chipT = System.currentTimeMillis() } }
-            override fun onTools() { ed.rev++ }
-            override fun onAnyDown() { focus.clearFocus(); Overlay.closePop(); if (ed.card != null && !(ed.card!!.dragging)) closeCard(); ed.edit?.let { e -> ed.edit = null; ed.view?.commitText(e.pi, e.t, e.isNew) } }
-            override fun quizCard(pi: Int, idx: Int, x: Float, y: Float, press: Boolean) {
-                ed.card = Card(pi, idx, x, y, press)
-                ed.view?.setCard(pi, idx)
-                if (Quiz.reveal(doc, idx)) ed.view?.animate(idx, listOf("stamp", "mark"))
-            }
-            override fun cardDrag(x: Float, y: Float) { val c = ed.card ?: return; setHot(c, x, y) }
-            override fun cardUp(x: Float, y: Float, pen: Boolean) {
-                val c = ed.card ?: return; c.dragging = false
-                val h = hitAct(c, x, y)
-                if (h != null) { c.hot = null; act(doc, ed, c, h); return }
-                if (pen) {
-                    // 펜 호버 단계: 곧 호버 움직임이 안 오면(멀리 듦) 닫힘
-                    c.hover = true; closeJob?.cancel()
-                    closeJob = scope.launch { delay(700); if (ed.card === c && !c.seen) closeCard() }
-                } else closeCard()
-            }
-            override fun cardHover(x: Float, y: Float) { val c = ed.card ?: return; if (!c.hover) return; if (!c.seen) { c.seen = true; closeJob?.cancel() }; setHot(c, x, y) }
-            override fun cardHoverExit() { val c = ed.card ?: return; if (c.hover) closeCard() }
-            override fun editText(pi: Int, t: TextBox, isNew: Boolean) { ed.view?.editing = t; ed.edit = TextEdit(pi, t, isNew) }
-            override fun quizChanged() { ed.rev++ }
-            override fun toast(s: String) { Overlay.toast(s) }
-            override fun onPull(active: Boolean) { ed.pulling = active }
+    fun hostFor(right: Boolean): DocView.Host = object : DocView.Host {
+        fun me(): DocView? = if (right) ed.right else ed.left
+        fun rx(x: Float) = x + (me()?.rootX ?: 0f)
+        fun ry(y: Float) = y + (me()?.rootY ?: 0f)
+        override fun onPage(n: Int, changed: Boolean) { if (changed && ed.view === me()) { ed.page = n; ed.chipT = System.currentTimeMillis() } }
+        override fun onTools() { ed.rev++ }
+        override fun onAnyDown() {
+            me()?.let { if (ed.view !== it) { ed.view = it; ed.page = it.pageIdx; ed.rev++ } }
+            focus.clearFocus(); Overlay.closePop()
+            if (ed.card != null && !(ed.card!!.dragging)) closeCard()
+            ed.edit?.let { e -> ed.edit = null; e.v.commitText(e.pi, e.t, e.isNew) }
         }
+        override fun quizCard(pi: Int, idx: Int, x: Float, y: Float, press: Boolean) {
+            val v = me() ?: return
+            ed.card = Card(v, pi, idx, rx(x), ry(y), press)
+            v.setCard(pi, idx)
+            if (Quiz.reveal(v.doc, idx)) v.animate(idx, listOf("stamp", "mark"))
+        }
+        override fun cardDrag(x: Float, y: Float) { val c = ed.card ?: return; setHot(c, rx(x), ry(y)) }
+        override fun cardUp(x: Float, y: Float, pen: Boolean) {
+            val c = ed.card ?: return; c.dragging = false
+            val h = hitAct(c, rx(x), ry(y))
+            if (h != null) { c.hot = null; act(ed, c, h); return }
+            if (pen) {
+                // 펜 호버 단계: 곧 호버 움직임이 안 오면(멀리 듦) 닫힘
+                c.hover = true; closeJob?.cancel()
+                closeJob = scope.launch { delay(700); if (ed.card === c && !c.seen) closeCard() }
+            } else closeCard()
+        }
+        override fun cardHover(x: Float, y: Float) { val c = ed.card ?: return; if (!c.hover) return; if (!c.seen) { c.seen = true; closeJob?.cancel() }; setHot(c, rx(x), ry(y)) }
+        override fun cardHoverExit() { val c = ed.card ?: return; if (c.hover) closeCard() }
+        override fun editText(pi: Int, t: TextBox, isNew: Boolean) { val v = me() ?: return; v.editing = t; ed.edit = TextEdit(v, pi, t, isNew) }
+        override fun quizChanged() { ed.rev++ }
+        override fun toast(s: String) { Overlay.toast(s) }
+        override fun onPull(active: Boolean) { ed.pulling = active }
     }
+    val hostL = remember(open) { hostFor(false) }
+    val hostR = remember(open) { hostFor(true) }
+    // 분할을 끝내면 오른쪽 문서 정리
+    fun endSplit() {
+        val r = ed.right; ed.split?.let { sd -> r?.saveNow(); if (sd.type == "pdf") sd.pdf?.close() }
+        ed.split = null; ed.ratio = .5f; ed.view = ed.left; ed.rev++; Y.haptic(10)
+    }
+    SplitCtl.start = { d2 -> ed.split?.let { endSplit() }; ed.split = d2; ed.ratio = .5f; Y.haptic(10) }
+    SplitCtl.end = { endSplit() }
 
     Box(Modifier.fillMaxSize().background(Color(Paper.c().desk))) {
-        androidx.compose.runtime.key(open.key) {
-            AndroidView(
-                factory = { ctx -> DocView(ctx, doc, host).also { v -> ed.view = v; v.restore(open.zoom, open.scroll) } },
-                modifier = Modifier.fillMaxSize(),
-                onRelease = { v -> open.scroll = v.sy; open.zoom = v.zoom; v.release(); if (ed.view === v) ed.view = null },
-            )
+        val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        val topPad = (if (ed.collapsed) with(d) { statusTop.toPx() } else ed.chromeH) + with(d) { 32.dp.toPx() }
+        val leftPane = @Composable { m: Modifier ->
+            androidx.compose.runtime.key(open.key) {
+                AndroidView(
+                    factory = { ctx -> DocView(ctx, doc, hostL).also { v -> ed.left = v; ed.view = v; v.restore(open.zoom, open.scroll) } },
+                    modifier = m.clipToBounds().onGloballyPositioned { c -> ed.left?.let { val o = c.boundsInRoot(); it.rootX = o.left; it.rootY = o.top } },
+                    update = { it.topPad = topPad },
+                    onRelease = { v -> open.scroll = v.sy; open.zoom = v.zoom; v.release(); if (ed.left === v) ed.left = null; if (ed.view === v) ed.view = null },
+                )
+            }
+        }
+        val sd = ed.split
+        // 왼쪽 칸은 늘 같은 자리(같은 부모)에 두고 크기만 바꿈: 옮기면 안드로이드 뷰가 다시 만들어져 그려지지 않음
+        var box by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+        Box(Modifier.fillMaxSize().onSizeChanged { box = it }) {
+            val bw = with(d) { box.width.toDp() }; val bh = with(d) { box.height.toDp() }
+            val vertical = sd != null && bw < 820.dp && bh > bw
+            val total = if (vertical) bh else bw
+            val hw = 12.dp
+            val r = if (sd == null) 1f else ed.ratio
+            val first = if (sd == null) total else ((total - hw) * r)
+            leftPane(if (vertical) Modifier.fillMaxWidth().height(first) else Modifier.fillMaxHeight().width(first))
+            if (sd != null) {
+                val rightPane = @Composable { m: Modifier ->
+                    androidx.compose.runtime.key(sd) {
+                        AndroidView(
+                            factory = { ctx -> DocView(ctx, sd, hostR).also { v -> ed.right = v; ed.view = v; v.restore("width", 0f) } },
+                            modifier = m.clipToBounds().onGloballyPositioned { c -> ed.right?.let { val o = c.boundsInRoot(); it.rootX = o.left; it.rootY = o.top } },
+                            update = { it.topPad = topPad },
+                            onRelease = { v -> v.release(); if (ed.right === v) ed.right = null; if (ed.view === v) ed.view = ed.left },
+                        )
+                    }
+                }
+                val second = (total - hw) * (1 - r)
+                if (vertical) {
+                    Box(Modifier.offset(y = first)) { SplitHandle(ed, true, total) }
+                    rightPane(Modifier.offset(y = first + hw).fillMaxWidth().height(second))
+                } else {
+                    Box(Modifier.offset(x = first)) { SplitHandle(ed, false, total) }
+                    rightPane(Modifier.offset(x = first + hw).fillMaxHeight().width(second))
+                }
+                // 지금 쓰는 칸 표시: 위쪽 가는 선
+                val act = ed.view
+                if (act != null && r > 0f && r < 1f) {
+                    val onRight = act === ed.right
+                    val lineY = with(d) { (topPad - 24.dp.toPx()).toDp() }
+                    if (vertical) Box(Modifier.offset(y = if (onRight) first + hw else lineY).fillMaxWidth().height(2.dp).background(T.acc))
+                    else Box(Modifier.offset(x = if (onRight) first + hw else 0.dp, y = lineY).width(if (onRight) second else first).height(2.dp).background(T.acc))
+                }
+            }
         }
         val dk = Y.isDark(); val gray = Y.paperGray()
-        LaunchedEffect(dk, gray) { ed.view?.themeChanged() }
-        val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-        LaunchedEffect(ed.chromeH, ed.collapsed, ed.view) {
-            ed.view?.topPad = (if (ed.collapsed) with(d) { statusTop.toPx() } else ed.chromeH) + with(d) { 32.dp.toPx() }
-        }
+        LaunchedEffect(dk, gray) { ed.left?.themeChanged(); ed.right?.themeChanged() }
 
         // 페이지 사이드바
-        PageSidebar(ed, doc, statusTop)
+        ed.view?.let { PageSidebar(ed, it.doc, statusTop) }
 
         // 정답 카드
-        ed.card?.let { QuizCard(ed, doc, it) { closeCard() } }
+        ed.card?.let { QuizCard(ed, it.v.doc, it) { closeCard() } }
 
         // 글상자 고치기
         ed.edit?.let { TextEditor(ed, it) }
 
         // 페이지 칩
-        PageChip(ed, doc)
+        ed.view?.let { PageChip(ed, it.doc) }
 
         // 상단 유리판
         Chrome(ed, open, statusTop, onExport)
@@ -229,17 +297,17 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
 
 private fun hitAct(c: Card, x: Float, y: Float): String? = c.acts.entries.firstOrNull { it.value.contains(androidx.compose.ui.geometry.Offset(x, y)) }?.key
 private fun setHot(c: Card, x: Float, y: Float) { val h = hitAct(c, x, y); if (h != c.hot) { c.hot = h; if (h != null) Y.haptic(6) } }
-private fun act(doc: Doc, ed: Ed, c: Card, v: String) {
-    Quiz.setGrade(doc, c.idx, v)
-    if (v != "clear") ed.view?.animate(c.idx, listOf("mark"))
-    ed.view?.quizRepaint(); ed.card = null; ed.view?.setCard(-1, -1); ed.rev++
+private fun act(ed: Ed, c: Card, v: String) {
+    Quiz.setGrade(c.v.doc, c.idx, v)
+    if (v != "clear") c.v.animate(c.idx, listOf("mark"))
+    c.v.quizRepaint(); ed.card = null; c.v.setCard(-1, -1); ed.rev++
 }
 
 /* =============== 상단 =============== */
 @Composable
 private fun Chrome(ed: Ed, open: OpenDoc, statusTop: androidx.compose.ui.unit.Dp, onExport: (Doc, DocView) -> Unit) {
     val d = LocalDensity.current
-    val doc = open.doc
+    val doc = ed.view?.doc ?: open.doc
     val hide = remember { Animatable(0f) }
     var drag by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(ed.collapsed) { hide.animateTo(if (ed.collapsed) 1f else 0f, tween(380, easing = Out)) }
@@ -264,7 +332,7 @@ private fun Chrome(ed: Ed, open: OpenDoc, statusTop: androidx.compose.ui.unit.Dp
             IconBtn("back", "라이브러리") { Nav.closeEditor() }
             DocTabs()
             Spacer(Modifier.width(6.dp))
-            var title by remember(open) { mutableStateOf(doc.title) }
+            var title by remember(open, doc) { mutableStateOf(doc.title) }
             BasicTextField(title, { title = it; doc.title = it; ed.view?.queueSave() }, Modifier.weight(1f),
                 textStyle = txt(15.sp, 600, T.snow).copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center), singleLine = true,
                 cursorBrush = SolidColor(T.acc), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
@@ -333,7 +401,7 @@ private fun moreMenu(ed: Ed, r: Rect) {
         PItem("설정", "settings") { Overlay.closePop(); kr.yeobaek.note.settings.openSettings() }
     }
 }
-private fun toggleDark(ed: Ed) { Y.settings.dark = if (Y.isDark()) "off" else "on"; Y.saveSettings(); QuizLayout.clearCache(); ed.view?.themeChanged(); Y.haptic(8) }
+private fun toggleDark(ed: Ed) { Y.settings.dark = if (Y.isDark()) "off" else "on"; Y.saveSettings(); QuizLayout.clearCache(); ed.left?.themeChanged(); ed.right?.themeChanged(); Y.haptic(8) }
 
 @Composable private fun Sep() = Box(Modifier.padding(horizontal = 4.dp).size(.5.dp, 22.dp).background(T.hair))
 
@@ -424,6 +492,7 @@ private fun Tools(ed: Ed, doc: Doc) {
                     }
                 }
             }
+            IconBtn("split", "분할 보기", pressed = ed.split != null) { r -> if (ed.split != null) SplitCtl.end() else splitPicker(r, v.doc) }
             IconBtn("moon", "다크 모드", pressed = Y.isDark()) { toggleDark(ed) }
         }
     }
@@ -452,7 +521,7 @@ private fun SearchBox(ed: Ed, v: DocView) {
 private fun tplPop(r: Rect, v: DocView, i: Int, after: () -> Unit) {
     Overlay.popover("tpl$i", r, 220.dp, "left") {
         PTitle("템플릿")
-        Y.TEMPLATES.forEach { (id, n) -> PItem(n, on = v.doc.pages.getOrNull(i)?.tpl == id) { v.setTemplate(i, id); Overlay.closePop(); after() } }
+        Y.TEMPLATES.forEach { (id, n) -> PItem(n, on = v.doc.pages.getOrNull(i)?.tpl == id) { v.setTemplateUndoable(i, id); Overlay.closePop(); after() } }
     }
 }
 
@@ -675,7 +744,8 @@ private fun PageSidebar(ed: Ed, doc: Doc, statusTop: androidx.compose.ui.unit.Dp
 private fun pageMenu(r: Rect, v: DocView, i: Int, ed: Ed) {
     val pages = v.doc.pages
     if (i !in pages.indices) return
-    fun after() { v.pagesChanged(); ed.rev++ }
+    val before = pages.toList()
+    fun after() { v.pagesChanged(before); ed.rev++ }
     Overlay.popover("pm$i", r, 200.dp, "left") {
         PItem("복제", "dup") {
             Overlay.closePop(); val pg = pages.getOrNull(i) ?: return@PItem
@@ -692,14 +762,14 @@ private fun pageMenu(r: Rect, v: DocView, i: Int, ed: Ed) {
 /* =============== 정답·풀이 카드 =============== */
 @Composable
 private fun QuizCard(ed: Ed, doc: Doc, c: Card, close: () -> Unit) {
-    val v = ed.view ?: return
+    val v = c.v
     val d = LocalDensity.current
     val pc = Paper.c()
     val k = v.W / QuizLayout.PW                                     // 페이지 1단위 = 픽셀
     val p = doc.quiz!!.problems[c.idx]
     val base = (11f * k / d.density / d.fontScale).coerceIn(14f, 19f)
-    val left = v.pageLeft() + 76f * k; val right = v.pageLeft() + v.W - 44f * k
-    val pageTop = v.pageTop(c.pi); val pageBottom = pageTop + v.pageH(c.pi)
+    val left = v.rootX + v.pageLeft() + 76f * k; val right = v.rootX + v.pageLeft() + v.W - 44f * k
+    val pageTop = v.rootY + v.pageTop(c.pi); val pageBottom = pageTop + v.pageH(c.pi)
     var hpx by remember(c) { mutableFloatStateOf(0f) }
     val below = c.y + 22f * k
     val up = hpx > 0 && below + hpx > pageBottom - 12f * k && c.y - hpx - 22f * k > pageTop + 8f * k
@@ -731,7 +801,7 @@ private fun QuizCard(ed: Ed, doc: Doc, c: Card, close: () -> Unit) {
                         .onGloballyPositioned { c.acts[id] = it.boundsInRoot() }
                         .clip(RoundedCornerShape(10.dp)).background(if (hot) col else cardBg)
                         .border(1.dp, if (g == id && !hot) ink else Color(pc.line2), RoundedCornerShape(10.dp))
-                        .pointerInput(id) { detectTapGestures { act(doc, ed, c, id) } },
+                        .pointerInput(id) { detectTapGestures { act(ed, c, id) } },
                         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                         val fg = if (hot) Color(pc.paper) else col
                         Ic(ic, size = (base * 1.15f).dp, color = fg)
@@ -785,9 +855,9 @@ fun TexText(src: String, sizeSp: Float, color: Color, weight: Int = 400, lineH: 
 /* =============== 글상자 =============== */
 @Composable
 private fun TextEditor(ed: Ed, e: TextEdit) {
-    val v = ed.view ?: return
+    val v = e.v
     val d = LocalDensity.current
-    val r = v.textRect(e.pi, e.t)
+    val r = v.textRect(e.pi, e.t).apply { offset(v.rootX, v.rootY) }
     val fr = remember(e) { FocusRequester() }
     var text by remember(e) { mutableStateOf(e.t.t) }
     var had by remember(e) { mutableStateOf(false) }
@@ -799,4 +869,53 @@ private fun TextEditor(ed: Ed, e: TextEdit) {
             .border(1.5.dp, T.acc, RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 2.dp)
             .focusRequester(fr).onFocusChanged { if (it.isFocused) had = true else if (had) done() },
         textStyle = txt(with(d) { (e.t.fs * v.W).toSp() }, 400, col), cursorBrush = SolidColor(T.acc))
+}
+
+/* =============== 화면 분할 =============== */
+object SplitCtl {
+    var start: (Doc) -> Unit = {}
+    var end: () -> Unit = {}
+}
+
+/** 옆에 열 문서 고르기: 새 노트, 또는 서재의 노트·PDF·문제지 */
+private fun splitPicker(r: Rect, cur: Doc) {
+    Overlay.popover("split", r, 280.dp, "right") {
+        PTitle("옆에 열기")
+        PItem("새 노트", "compose") {
+            Overlay.closePop()
+            val meta = Nav.newNote(Y.clean(cur.title) + " 노트", Nav.nextCover(), "lined", null)
+            Nav.load(meta) { d -> if (d != null) SplitCtl.start(d) }
+        }
+        Y.lib.notes.filter { !it.trashed && it.id != cur.id && it.id != cur.libId }.sortedByDescending { it.updated }.take(30).forEach { n ->
+            PItem(Y.clean(n.title).ifEmpty { "제목 없음" }, when (n.kind) { "pdf" -> "pdf"; "quiz" -> "quiz"; else -> "notes" }) {
+                Overlay.closePop(); Nav.load(n) { d -> if (d != null) SplitCtl.start(d) else Overlay.toast("열 수 없어요") }
+            }
+        }
+    }
+}
+
+/** 가운데 손잡이: 끌어서 크기 조절, 놓으면 0 · 40 · 50 · 60 · 100% 중 가까운 곳에 딸깍 */
+@Composable
+private fun SplitHandle(ed: Ed, vertical: Boolean, total: androidx.compose.ui.unit.Dp) {
+    val d = LocalDensity.current
+    var live by remember { mutableStateOf<Float?>(null) }
+    val m = Modifier.pointerInput(vertical, total) {
+        val tp = total.toPx()
+        detectDragGestures(
+            onDragStart = { live = ed.ratio },
+            onDragEnd = {
+                val v = live ?: ed.ratio; live = null
+                val nr = listOf(0f, .4f, .5f, .6f, 1f).minBy { kotlin.math.abs(it - v) }
+                if (nr != ed.ratio) Y.haptic(12)
+                ed.ratio = nr
+                if (nr == 0f) ed.view = ed.right else if (nr == 1f) ed.view = ed.left
+            },
+            onDragCancel = { live = null },
+        ) { ch, delta -> ch.consume(); val nv = ((live ?: ed.ratio) + (if (vertical) delta.y else delta.x) / tp).coerceIn(0f, 1f); live = nv; ed.ratio = nv.coerceIn(.08f, .92f) }
+    }
+    if (vertical) Box(m.fillMaxWidth().height(12.dp).background(Color(Paper.c().desk)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(40.dp, 4.dp).clip(CircleShape).background(if (live != null) T.acc else T.ink2.copy(alpha = .5f)))
+    } else Box(m.fillMaxHeight().width(12.dp).background(Color(Paper.c().desk)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(4.dp, 40.dp).clip(CircleShape).background(if (live != null) T.acc else T.ink2.copy(alpha = .5f)))
+    }
 }

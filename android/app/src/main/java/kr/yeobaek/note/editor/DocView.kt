@@ -64,6 +64,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         fun onPull(active: Boolean) {}
     }
 
+    /** 이 칸의 화면(루트) 위치: 정답 카드·글상자를 겹쳐 그릴 때 */
+    var rootX = 0f; var rootY = 0f
     private val dens = resources.displayMetrics.density
     private fun dp(v: Float) = v * dens
     private val ACT_W get() = dp(794f)
@@ -171,7 +173,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     }
 
     /* =============== 페이지 그림 캐시 =============== */
-    private class Cache(val bm: Bitmap, val rs: Float, var dirty: Boolean = true)
+    private class Cache(val bm: Bitmap, val rs: Float, var dirty: Boolean = true) { var region: RectF? = null }
     private val caches = HashMap<Int, Cache>()
     private val pdfBm = HashMap<Int, Bitmap>()
     private val pdfJobs = HashMap<Int, PdfSource.Job>()
@@ -180,8 +182,19 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     private fun dropCaches() {
         caches.values.forEach { it.bm.recycle() }; caches.clear()
     }
-    fun dirty(pi: Int) { caches[pi]?.dirty = true; invalidate() }
-    fun dirtyAll() { caches.values.forEach { it.dirty = true }; invalidate() }
+    fun dirty(pi: Int) { caches[pi]?.dirty = true; sharpGen++; invalidate() }
+    fun dirtyAll() { caches.values.forEach { it.dirty = true }; sharpGen++; invalidate() }
+    /** 정규화 사각형(x0,y0,x1,y1, 페이지 너비 기준)만 다시 그림: 획 하나 바뀔 때 페이지 전체를 다시 그리지 않게 */
+    fun dirtyRect(pi: Int, b: FloatArray, pad: Float = 0.01f) {
+        val c = caches[pi] ?: return invalidate()
+        sharpGen++
+        if (c.dirty) { invalidate(); return }
+        val K = c.bm.width.toFloat()
+        val r = RectF((b[0] - pad) * K - 2, (b[1] - pad) * K - 2, (b[2] + pad) * K + 2, (b[3] + pad) * K + 2)
+        c.region = c.region?.apply { union(r) } ?: r
+        invalidate()
+    }
+    private fun dirtyStrokes(pi: Int, list: Collection<Stroke>) { if (list.isEmpty()) return; dirtyRect(pi, Ink.bbox(list.toList())) }
     fun themeChanged() { QuizLayout.clearCache(); textCache.clear(); dirtyAll() }
 
     private fun rsFor(i: Int): Float = min(1f, min(3600f / W, 4096f / pageH(i)))
@@ -195,8 +208,14 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             c = Cache(Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888), rs); caches[i] = c
         }
         if (c.dirty) {
-            renderPage(Canvas(c.bm), i, c.bm.width.toFloat(), c.rs, exclude = sel?.takeIf { it.pi == i }?.strokes); c.dirty = false
+            renderPage(Canvas(c.bm), i, c.bm.width.toFloat(), c.rs, exclude = sel?.takeIf { it.pi == i }?.strokes); c.dirty = false; c.region = null
             cur?.takeIf { it.pi == i }?.let { it.liveBaked = false; it.baked = 0 }
+        } else c.region?.let { r ->
+            c.region = null
+            val cv = Canvas(c.bm); cv.save(); cv.clipRect(r)
+            renderPage(cv, i, c.bm.width.toFloat(), c.rs, exclude = sel?.takeIf { it.pi == i }?.strokes)
+            cv.restore()
+            cur?.takeIf { it.pi == i && it.liveBaked }?.let { it.liveBaked = false; it.baked = 0 }
         }
         if (doc.type == "pdf") requestPdf(i, bw)
         return c
@@ -217,9 +236,9 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
      * 페이지 한 장: 종이 → 양식 → PDF → 문제지 → 필기 → 글상자.
      * @param K 그림 너비(픽셀) @param px 화면 1px당 픽셀
      */
-    fun renderPage(cv: Canvas, i: Int, K: Float, px: Float, exclude: List<Stroke>? = null, pdf: Bitmap? = pdfBm[i], forExport: Boolean = false) {
+    fun renderPage(cv: Canvas, i: Int, K: Float, px: Float, exclude: List<Stroke>? = null, pdf: Bitmap? = pdfBm[i], forExport: Boolean = false, bg: Boolean = true) {
         val pg = doc.pages[i]; val c = Paper.c(); val H = K * pg.ratio
-        if (doc.type == "pdf") { cv.drawColor(android.graphics.Color.WHITE); pdf?.let { tp.reset(); tp.isFilterBitmap = true; if (c.dark && !forExport) tp.colorFilter = DIM; cv.drawBitmap(it, null, RectF(0f, 0f, K, H), tp) } }
+        if (!bg) {} else if (doc.type == "pdf") { cv.drawColor(android.graphics.Color.WHITE); pdf?.let { tp.reset(); tp.isFilterBitmap = true; if (c.dark && !forExport) tp.colorFilter = DIM; cv.drawBitmap(it, null, RectF(0f, 0f, K, H), tp) } }
         else cv.drawColor(c.paper)
         if (doc.type == "note") Templates.draw(cv, pg.tpl, K, H, max(1f, dens * px), c)
         if (doc.type == "quiz") {
@@ -261,6 +280,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
 
     override fun onDraw(cv: Canvas) {
         val c = Paper.c()
+        // 화면 분할에서 옆 칸을 덮지 않게 내 영역으로 자름 (Compose가 안드로이드 뷰를 그릴 때 잘라 주지 않음)
+        cv.clipRect(0f, 0f, width.toFloat(), height.toFloat())
         cv.drawColor(c.desk)
         if (tops.size != doc.pages.size) layoutTops()
         cv.save()
@@ -280,9 +301,12 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             cv.drawBitmap(cache.bm, null, r, p)
             p.reset(); p.isAntiAlias = true; p.style = Paint.Style.STROKE; p.strokeWidth = dp(.5f); p.color = if (c.dark) 0x12FFFFFF else 0x14212529
             cv.drawRoundRect(r, dp(4f), dp(4f), p)
-            drawOverlay(cv, i, left, top)
             cv.restore()
         }
+        // 확대했을 때: 멈추면 보이는 부분을 화면 해상도로 다시 그린 것을 덮음
+        val sharpOk = cur == null && pinch == null && pullV == 0f && bornPage < 0 && keep.any { rsFor(it) < 0.999f }
+        if (sharpOk) { val sb = sharp; if (sb != null && sharpKey == sharpKeyNow()) cv.drawBitmap(sb, 0f, 0f, null) else scheduleSharp() }
+        for (i in keep.sorted()) drawOverlay(cv, i, left, pageTop(i))
         // (페이지 추가 버튼은 숨김: 고무줄로 당겨서)
         if (false && doc.type == "note" && doc.pages.isNotEmpty()) {
             val y = tops.last() + pageH(doc.pages.size - 1) + gap - sy - pullV
@@ -299,6 +323,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         }
         cv.restore()
         drawPull(cv, c)
+        drawCursor(cv, c)
         // 안 보이는 페이지는 메모리에서 내림
         val drop = caches.keys.filter { it !in keep }
         drop.forEach { caches.remove(it)?.bm?.recycle() }
@@ -310,6 +335,75 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         }
     }
     private val addRect = RectF()
+
+    /* ---------- 확대 선명화 ---------- */
+    var sharpGen = 0
+    private var sharp: Bitmap? = null
+    private var sharpKey = ""
+    private val sharpJobs = ArrayList<PdfSource.Job>()
+    private fun sharpKeyNow() = "${sx.roundToInt()}|${sy.roundToInt()}|${W.roundToInt()}|$sharpGen|${Paper.c().dark}|${width}x$height"
+    private val sharpRun = Runnable { buildSharp() }
+    private fun scheduleSharp() { main.removeCallbacks(sharpRun); main.postDelayed(sharpRun, 160) }
+    private fun busy() = scrolling != null || glideRun != null || pinch != null || springRun != null || cur != null
+    private fun buildSharp() {
+        if (width == 0 || height == 0) return
+        if (busy()) { scheduleSharp(); return }
+        val key = sharpKeyNow()
+        sharpJobs.forEach { it.cancel() }; sharpJobs.clear()
+        val vis = doc.pages.indices.filter { val t = pageTop(it); t + pageH(it) > 0 && t < height && rsFor(it) < 0.999f }
+        if (vis.isEmpty()) return
+        val left = pageLeft()
+        fun compose(regions: Map<Int, Pair<RectF, Bitmap>>) {
+            if (sharpKeyNow() != key) { regions.values.forEach { it.second.recycle() }; return }
+            val bm = sharp?.takeIf { it.width == width && it.height == height } ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { sharp?.recycle(); sharp = it }
+            bm.eraseColor(0)
+            val cv = Canvas(bm)
+            for (i in vis) {
+                val top = pageTop(i)
+                val clip = RectF(max(0f, left), max(0f, top), min(width.toFloat(), left + W), min(height.toFloat(), top + pageH(i)))
+                if (clip.isEmpty) continue
+                cv.save(); cv.clipRect(clip)
+                regions[i]?.let { (r, b) ->
+                    tp.reset(); tp.isFilterBitmap = true; if (Paper.c().dark) tp.colorFilter = DIM
+                    cv.drawBitmap(b, left + r.left, top + r.top, tp); b.recycle()
+                }
+                cv.translate(left, top)
+                renderPage(cv, i, W, 1f, exclude = sel?.takeIf { it.pi == i }?.strokes, pdf = null, bg = doc.type != "pdf")
+                cv.restore()
+            }
+            sharpKey = key; invalidate()
+        }
+        val src = doc.pdf
+        if (doc.type != "pdf" || src == null) { compose(emptyMap()); return }
+        // PDF: 보이는 부분만 원본에서 선명하게 받아 온 뒤에 합침
+        val got = HashMap<Int, Pair<RectF, Bitmap>>()
+        val need = vis.size
+        for (i in vis) {
+            val top = pageTop(i)
+            val r = RectF(max(0f, -left), max(0f, -top), min(W, width - left), min(pageH(i), height - top))
+            sharpJobs.add(src.renderRegion(i, W, r) { b -> got[i] = r to b; if (got.size == need) compose(got) })
+        }
+    }
+
+    /* ---------- S Pen 커서: 띄우면 작은 점, 지우개는 크기 원 ---------- */
+    private var hoverX = -1f; private var hoverY = -1f; private var hoverErase = false
+    private fun drawCursor(cv: Canvas, c: PaperColors) {
+        val cu = cur
+        val erasing = cu != null && cu.mode == "eraser"
+        if (cu != null && !erasing) return
+        if (hoverX < 0 && !erasing) return
+        val x = if (cu != null) cu.lastX else hoverX; val y = if (cu != null) cu.lastY else hoverY
+        p.reset(); p.isAntiAlias = true
+        if (erasing || hoverErase || YY.mode == "eraser") {
+            val r = YY.eraser.mm / YY.MM / 2 * W
+            p.style = Paint.Style.FILL; p.color = if (c.dark) 0x14FFFFFF else 0x10212529; cv.drawCircle(x, y, r, p)
+            p.style = Paint.Style.STROKE; p.strokeWidth = dp(1f); p.color = if (c.dark) 0x99A4A7B0.toInt() else 0x996C757D.toInt(); cv.drawCircle(x, y, r, p)
+        } else if (YY.mode == "pen") {
+            val pen = YY.curPen()
+            p.color = Ink.strokeColor(Stroke(pen.kind, pen.color), c.dark && doc.type != "pdf"); p.alpha = 200
+            cv.drawCircle(x, y, max(dp(1.6f), pen.mm / YY.MM * W / 2), p)
+        }
+    }
 
     private fun drawOverlay(cv: Canvas, i: Int, left: Float, top: Float) {
         val c = Paper.c(); val K = W; val dark = c.dark && doc.type != "pdf"
@@ -351,14 +445,24 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     private var dashT = 0f
 
     /* =============== 기록(실행취소) =============== */
-    class Entry(val pi: Int, val undo: () -> Unit, val redo: () -> Unit)
-    val hist = ArrayList<Entry>(); val redoList = ArrayList<Entry>()
+    /** pg == null 이면 페이지 구성(추가·삭제·순서) 바뀜 */
+    class Entry(val pg: Page?, val undo: () -> Unit, val redo: () -> Unit, val box: (() -> FloatArray?)? = null)
+    /** 기록은 문서에 둠: 화면 분할로 칸을 새로 만들어도 실행취소가 이어짐 */
+    @Suppress("UNCHECKED_CAST") val hist: ArrayList<Entry> = doc.undo as ArrayList<Entry>
+    @Suppress("UNCHECKED_CAST") val redoList: ArrayList<Entry> = doc.redo as ArrayList<Entry>
 
-    private fun pushHist(pi: Int, undo: () -> Unit, redo: () -> Unit) {
-        hist.add(Entry(pi, undo, redo)); redoList.clear(); queueSave(); host.onTools()
+    private fun pushHist(pi: Int, undo: () -> Unit, redo: () -> Unit, box: (() -> FloatArray?)? = null) {
+        hist.add(Entry(doc.pages.getOrNull(pi), undo, redo, box)); redoList.clear(); queueSave(); host.onTools()
     }
-    fun undo() { val e = hist.removeLastOrNull() ?: return; clearSel(true); e.undo(); redoList.add(e); textCache.clear(); dirty(e.pi); queueSave(); host.onTools() }
-    fun redo() { val e = redoList.removeLastOrNull() ?: return; clearSel(true); e.redo(); hist.add(e); textCache.clear(); dirty(e.pi); queueSave(); host.onTools() }
+    private fun refresh(e: Entry) {
+        textCache.clear()
+        if (e.pg == null) { rebuild(); return }
+        val pi = doc.pages.indexOf(e.pg); if (pi < 0) return
+        val b = e.box?.invoke()
+        if (b != null) dirtyRect(pi, b) else dirty(pi)
+    }
+    fun undo() { val e = hist.removeLastOrNull() ?: return; clearSel(true); e.undo(); redoList.add(e); refresh(e); queueSave(); host.onTools() }
+    fun redo() { val e = redoList.removeLastOrNull() ?: return; clearSel(true); e.redo(); hist.add(e); refresh(e); queueSave(); host.onTools() }
 
     /* =============== 저장 =============== */
     private val main = Handler(Looper.getMainLooper())
@@ -405,14 +509,26 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     /* =============== 페이지 =============== */
     fun addPage(tpl: String? = null, stay: Boolean = false): Int {
         val last = doc.pages.lastOrNull()
+        val before = doc.pages.toList()
         doc.pages.add(Docs.makePage(tpl ?: last?.tpl ?: "lined"))
+        pushPages(before)
         layoutTops(); queueSave(); host.onTools()
         val i = doc.pages.size - 1
         if (!stay) scrollToPage(i)
         invalidate(); return i
     }
     fun setTemplate(i: Int, tpl: String) { doc.pages[i].tpl = tpl; dirty(i); queueSave() }
-    fun pagesChanged() { hist.clear(); redoList.clear(); sel = null; rebuild(); queueSave() }
+    /** 페이지 구성이 바뀐 뒤: before(바뀌기 전 목록)를 주면 실행취소로 되돌릴 수 있음 */
+    fun pagesChanged(before: List<Page>? = null) { sel = null; if (before != null) pushPages(before); rebuild(); queueSave() }
+    private fun pushPages(before: List<Page>) {
+        val after = doc.pages.toList()
+        hist.add(Entry(null, { doc.pages.clear(); doc.pages.addAll(before) }, { doc.pages.clear(); doc.pages.addAll(after) })); redoList.clear()
+    }
+    fun setTemplateUndoable(i: Int, tpl: String) {
+        val pg = doc.pages.getOrNull(i) ?: return; val old = pg.tpl; if (old == tpl) return
+        pg.tpl = tpl; dirty(i); queueSave()
+        hist.add(Entry(pg, { pg.tpl = old }, { pg.tpl = tpl })); redoList.clear(); host.onTools()
+    }
 
     /* =============== 문제지 =============== */
     private val anims = ArrayList<QuizLayout.Anim>()
@@ -603,6 +719,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         var liveBaked = false; var baked = 0
         var erased = false
         var jumps = 0
+        val touched = ArrayList<Stroke>()
+        var lastX = 0f; var lastY = 0f
     }
     private var cur: Cur? = null
 
@@ -700,7 +818,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             return
         }
         val c = Cur(pi, id, mode, tool == "touch", SystemClock.uptimeMillis(), x, y); cur = c
-        if (mode == "eraser") { eraseAt(c, pt); return }
+        if (mode == "eraser") { c.lastX = x; c.lastY = y; eraseAt(c, pt); invalidate(); return }
         if (mode == "lasso") {
             val s = sel
             if (s != null && s.pi == pi) {
@@ -771,6 +889,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             Ink.move(sp.strokes, 0f, dy); sp.texts.forEach { it.y += dy }; sp.dy = want; textCache.clear(); dirty(c.pi); return
         }
         if (c.mode == "eraser") {
+            c.lastX = x; c.lastY = y
             for (h in 0 until ev.historySize) eraseAt(c, norm(c.pi, ev.getHistoricalX(i, h), ev.getHistoricalY(i, h)))
             eraseAt(c, norm(c.pi, x, y)); return
         }
@@ -885,13 +1004,13 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
                 if (!cancel && doc.type == "quiz" && SystemClock.uptimeMillis() - c.t0 < 350 && hypot(x - c.x0, y - c.y0) < dp(8f) && quizTap(c.pi, c.x0, c.y0)) {
                     // 보기 위를 톡: 점은 지우고 고르기로
                     dirty(c.pi)
-                } else if (cancel && st.p.size < 3) { dirty(c.pi) }
+                } else if (cancel && st.p.size < 3) { dirtyStrokes(c.pi, listOf(st)) }
                 else {
                     st.live = false; c.pred = null
                     pg.strokes.add(st)
-                    dirty(c.pi)
-                    pushHist(c.pi, { pg.strokes.remove(st) }, { pg.strokes.add(st) })
-                    if (c.snapped) { val oldP = c.snapOld!!; val newP = st.p; hist.add(Entry(c.pi, { st.p = oldP }, { st.p = newP })) }
+                    dirtyStrokes(c.pi, listOf(st))
+                    pushHist(c.pi, { pg.strokes.remove(st) }, { pg.strokes.add(st) }) { Ink.bbox(listOf(st)) }
+                    if (c.snapped) { val oldP = c.snapOld!!; val newP = st.p; hist.add(Entry(pg, { st.p = oldP }, { st.p = newP })) }
                 }
             }
         }
@@ -906,6 +1025,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         } })
     }
 
+    /** 지워진 획 전체 자리 (부분 지우기 뒤 남은 조각 포함) */
+    private fun erasedBox(c: Cur) { if (c.touched.isNotEmpty()) { dirtyStrokes(c.pi, c.touched); c.touched.clear() } }
     private fun eraseAt(c: Cur, pt: FloatArray) {
         val pg = doc.pages[c.pi]
         val r = YY.eraser.mm / YY.MM / 2; val step = max(0.004f, r / 2)
@@ -914,6 +1035,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             val st = pg.strokes[i]
             if (!Ink.hits(st, pt, r)) continue
             any = true
+            c.touched.add(st)
             if (!c.added.remove(st)) c.removed.add(st to i)
             pg.strokes.removeAt(i)
             if (YY.eraser.partial) {
@@ -923,7 +1045,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
                 pieces.reversed().forEach { run2 -> val ns = Stroke(st.t, st.c, st.s, st.a, st.k, run2); pg.strokes.add(i, ns); c.added.add(ns) }
             }
         }
-        if (any) { if (sel?.pi == c.pi) clearSel(true); dirty(c.pi) }
+        if (any) { if (sel?.pi == c.pi) clearSel(true); dirtyRect(c.pi, floatArrayOf(pt[0] - r, pt[1] - r, pt[0] + r, pt[1] + r), 0.02f); erasedBox(c) }
     }
 
     /* ---------- 핀치 ---------- */
@@ -1002,8 +1124,12 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         if (ev.getToolType(0) != MotionEvent.TOOL_TYPE_STYLUS) return super.onHoverEvent(ev)
         lastPen = SystemClock.uptimeMillis()
         when (ev.actionMasked) {
-            MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_HOVER_ENTER -> host.cardHover(ev.x, ev.y)
-            MotionEvent.ACTION_HOVER_EXIT -> host.cardHoverExit()
+            MotionEvent.ACTION_HOVER_MOVE, MotionEvent.ACTION_HOVER_ENTER -> {
+                hoverX = ev.x; hoverY = ev.y
+                hoverErase = (ev.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0 && YY.settings.penButton == "eraser"
+                invalidate(); host.cardHover(ev.x, ev.y)
+            }
+            MotionEvent.ACTION_HOVER_EXIT -> { hoverX = -1f; invalidate(); host.cardHoverExit() }
         }
         return true
     }
@@ -1033,6 +1159,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     val canRedo get() = redoList.isNotEmpty()
 
     fun release() {
+        sharp?.recycle(); sharp = null; sharpJobs.forEach { it.cancel() }
         saveNow()
         stopGlide(); stopSpring(); main.removeCallbacksAndMessages(null)
         dropCaches(); pdfBm.values.forEach { it.recycle() }; pdfBm.clear(); pdfJobs.values.forEach { it.cancel() }

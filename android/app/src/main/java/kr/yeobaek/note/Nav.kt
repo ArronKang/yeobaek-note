@@ -95,6 +95,23 @@ object Nav {
         }
     }
 
+    /** 탭으로 열지 않고 문서만 (화면 분할용) */
+    fun load(n: NoteMeta, cb: (Doc?) -> Unit) {
+        busy = true
+        scope.launch {
+            val d = withContext(Dispatchers.IO) {
+                runCatching {
+                    when (n.kind) {
+                        "pdf" -> pdfDoc(Store.file("blobs/${n.id}.pdf"), n.key ?: n.id, n.title)?.also { it.libId = n.id }
+                        "quiz" -> { Quiz.prep(n); Quiz.quizDoc(n) }
+                        else -> Docs.noteDoc(n)
+                    }
+                }.getOrNull()
+            }
+            busy = false; cb(d)
+        }
+    }
+
     private fun pdfDoc(f: File, key: String, title: String): Doc? {
         val src = PdfSource.open(f) ?: return null
         val ink = Store.get("p/${Y.keyFile(key)}.json", PdfInk.serializer())

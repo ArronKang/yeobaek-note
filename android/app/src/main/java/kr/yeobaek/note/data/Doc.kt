@@ -27,6 +27,8 @@ class Doc(
     var libId: String? = null,
 ) {
     val bookmarks = HashSet<Int>()
+    /** 실행취소 기록 (DocView.Entry) */
+    val undo = ArrayList<Any>(); val redo = ArrayList<Any>()
     /** 페이지 구성이 바뀐 횟수 (화면이 다시 짜이게) */
     var rev = 0
 }
