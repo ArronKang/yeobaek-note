@@ -300,7 +300,7 @@ private fun Main(wide: Boolean, modifier: Modifier) {
         Box(Modifier.weight(1f).graphicsLayer { alpha = rise.value; translationY = (1 - rise.value) * 10.dp.toPx() }) {
             if (notes.isEmpty()) Empty(trash)
             else if (L.mode == "cover") {
-                LazyVerticalGrid(GridCells.Adaptive(160.dp), horizontalArrangement = Arrangement.spacedBy(28.dp), verticalArrangement = Arrangement.spacedBy(40.dp),
+                LazyVerticalGrid(GridCells.FixedSize(160.dp), horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.Start), verticalArrangement = Arrangement.spacedBy(40.dp),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = sys.calculateBottomPadding() + 40.dp)) {
                     items(notes, key = { it.id }) { n -> CoverItem(n, trash) }
                 }
