@@ -398,7 +398,7 @@ fun Cover(n: NoteMeta, small: Boolean = false, modifier: Modifier = Modifier) {
         if (th != null) Image(th, null, Modifier.fillMaxSize().graphicsLayer { alpha = if (dk) .9f else 1f }, contentScale = ContentScale.Crop, alignment = Alignment.TopCenter)
         if (small) return@Box
         if (n.kind == "pdf") {
-            BasicText("PDF", Modifier.align(Alignment.TopEnd).padding(8.dp).background(Color(0xB8212529), RoundedCornerShape(5.dp)).padding(horizontal = 6.dp, vertical = 3.dp), style = txt(10.sp, 700, Color.White, .04f))
+            if (!L.selecting) BasicText("PDF", Modifier.align(Alignment.TopEnd).padding(8.dp).background(Color(0xB8212529), RoundedCornerShape(5.dp)).padding(horizontal = 6.dp, vertical = 3.dp), style = txt(10.sp, 700, Color.White, .04f))
             return@Box
         }
         BasicText(Y.clean(n.title).ifEmpty { "제목 없음" }, Modifier.align(Alignment.BottomStart).padding(12.dp), style = txt(15.sp, 600, Color(0xFFF8F9FA), -.01f).copy(lineHeight = 19.sp), maxLines = 3, overflow = TextOverflow.Ellipsis)

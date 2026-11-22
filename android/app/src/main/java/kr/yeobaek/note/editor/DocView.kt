@@ -490,15 +490,18 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
 
     private fun band(raw: Float, D: Float): Float { val a = abs(raw); return sign(raw) * D * (1 - 1 / (a * 0.55f / D + 1)) }
 
+    private var pullT0 = 0L
     private fun pull(raw: Float) {
         stopSpring(); bouncing = false
+        if (pullRaw == 0f && raw != 0f) pullT0 = SystemClock.uptimeMillis()
         pullRaw = raw
         pullV = if (raw != 0f) band(raw, height * 0.6f) else 0f
         paintPull()
     }
     private fun paintPull() {
         val canAdd = doc.type == "note" && pullV > 0 && !bouncing
-        val armed = canAdd && pullV / ARM >= 1f
+        // 빠르게 튕긴 손가락은 걸리지 않게: 0.25초 넘게 당기고 있을 때만
+        val armed = canAdd && pullV / ARM >= 1f && SystemClock.uptimeMillis() - pullT0 > 250
         if (armed != pullArmed) { pullArmed = armed; if (armed) YY.haptic(12) }
         host.onPull(pullV != 0f)
         invalidate()
@@ -599,6 +602,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         var pred: Stroke? = null
         var liveBaked = false; var baked = 0
         var erased = false
+        var jumps = 0
     }
     private var cur: Cur? = null
 
@@ -668,7 +672,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             if (!YY.settings.finger) {
                 stopGlide(); stopSpring()
                 if (pinch != null) return
-                scrolling = Scroll(id, x, y, SystemClock.uptimeMillis(), sx, sy).also { it.hist.add(floatArrayOf(x, y, SystemClock.uptimeMillis().toFloat())) }
+                scrolling = Scroll(id, x, y, SystemClock.uptimeMillis(), sx, sy).also { it.hist.add(floatArrayOf(x, y, 0f)) }
                 startLP(id, x, y)
                 return
             }
@@ -732,7 +736,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             if (touches.containsKey(id)) { touches[id] = floatArrayOf(x, y); if (pinch != null) { movePinch(); continue } }
             val S = scrolling
             if (S != null && S.id == id) {
-                S.hist.add(floatArrayOf(x, y, SystemClock.uptimeMillis().toFloat())); if (S.hist.size > 6) S.hist.removeAt(0)
+                S.hist.add(floatArrayOf(x, y, (SystemClock.uptimeMillis() - S.ts).toFloat())); if (S.hist.size > 6) S.hist.removeAt(0)
                 val want = S.t0 - (y - S.y0)
                 // 끝을 넘어 당기면 고무줄처럼 늘어남
                 if (want > maxSy) { sy = maxSy; pull(want - maxSy) }
@@ -779,8 +783,9 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             pt[2] = ((last[2] * 0.6f + pt[2] * 0.4f) * 100).roundToInt() / 100f
             val d = hypot(pt[0] - last[0], pt[1] - last[1])
             if (d < 0.0005f) return
-            // 갑자기 멀리 튄 점(센서 노이즈)은 버림
-            if (d > 0.12f && st.p.size > 1) return
+            // 갑자기 멀리 튄 점(센서 노이즈)은 버림. 단 다음 점도 그쪽이면 진짜 움직임(화면이 잠깐 바빴던 것)으로 보고 이어 그림
+            if (d > 0.12f && st.p.size > 1 && c.jumps++ < 1) return
+            c.jumps = 0
             st.p.add(pt)
         }
         for (h in 0 until ev.historySize) addPt(ev.getHistoricalX(i, h), ev.getHistoricalY(i, h), ev.getHistoricalPressure(i, h))
@@ -838,7 +843,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
                 val pi = hitPage(x, y); if (pi >= 0 && quizTap(pi, x, y)) return
             }
             if (pullRaw != 0f) { pullRelease(); return }
-            val hs = S.hist.filter { now - it[2] < 100 }
+            val rel = (now - S.ts).toFloat(); val hs = S.hist.filter { rel - it[2] < 100 }
             if (hs.size >= 2 && !cancel) {
                 val a = hs.first(); val b = hs.last(); val dt = max(8f, b[2] - a[2])
                 glide(-(b[0] - a[0]) / dt, -(b[1] - a[1]) / dt)

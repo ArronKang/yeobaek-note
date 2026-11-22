@@ -8,7 +8,7 @@ import java.io.File
 
 /** 기기 안 파일 저장소. 웹의 localStorage 키를 파일 하나씩으로 옮겼어요 (앱을 업데이트해도 남아요). */
 object Store {
-    val json = Json { ignoreUnknownKeys = true; encodeDefaults = false; explicitNulls = false; isLenient = true; coerceInputValues = true }
+    val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false; isLenient = true; coerceInputValues = true }
     lateinit var root: File
 
     fun init(ctx: Context) {

@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -152,6 +154,8 @@ fun OverlayHost() {
 @Composable
 private fun PopoverBox(spec: PopSpec) {
     val d = LocalDensity.current
+    val sb = androidx.compose.foundation.layout.WindowInsets.systemBars
+    val insT = sb.getTop(d); val insB = sb.getBottom(d)
     var size by remember(spec) { mutableStateOf(IntSize.Zero) }
     var screen by remember { mutableStateOf(IntSize.Zero) }
     val a = remember(spec) { Animatable(0f) }
@@ -163,12 +167,12 @@ private fun PopoverBox(spec: PopSpec) {
                 while (true) {
                     val e = awaitPointerEvent(PointerEventPass.Initial)
                     val ch = e.changes.firstOrNull { it.pressed && !it.previousPressed } ?: continue
-                    val r = Rect(popPos(spec, size, screen, d).toOffset(), androidx.compose.ui.geometry.Size(size.width.toFloat(), size.height.toFloat()))
+                    val r = Rect(popPos(spec, size, screen, d, insT, insB).toOffset(), androidx.compose.ui.geometry.Size(size.width.toFloat(), size.height.toFloat()))
                     if (!r.contains(ch.position)) { ch.consume(); Overlay.closePop() }
                 }
             }
         }) {
-        val pos = popPos(spec, size, screen, d)
+        val pos = popPos(spec, size, screen, d, insT, insB)
         val ox = if (size.width > 0) ((spec.anchor.center.x - pos.x) / size.width).coerceIn(0f, 1f) else .5f
         val up = pos.y < spec.anchor.top
         Column(Modifier.offset { pos }.onSizeChanged { size = it }
@@ -176,20 +180,22 @@ private fun PopoverBox(spec: PopSpec) {
             .graphicsLayer { val s = .9f + .1f * a.value; scaleX = s; scaleY = s; alpha = (a.value * 6).coerceAtMost(1f); transformOrigin = TransformOrigin(ox, if (up) 1f else 0f) }
             .shadow(16.dp, RoundedCornerShape(14.dp), ambientColor = Color(0x24212529), spotColor = Color(0x24212529))
             .background(T.raise, RoundedCornerShape(14.dp)).border(.5.dp, T.hair, RoundedCornerShape(14.dp))
-            .heightIn(max = with(d) { (screen.height * .7f).toDp() }.coerceAtLeast(120.dp))
+            .heightIn(max = with(d) { ((screen.height - insT - insB) * .8f).toDp() }.coerceAtLeast(120.dp))
             .verticalScroll(rememberScrollState()).padding(8.dp)) { spec.content(this) }
     }
 }
 
 private fun IntOffset.toOffset() = Offset(x.toFloat(), y.toFloat())
-private fun popPos(spec: PopSpec, size: IntSize, screen: IntSize, d: androidx.compose.ui.unit.Density): IntOffset {
+private fun popPos(spec: PopSpec, size: IntSize, screen: IntSize, d: androidx.compose.ui.unit.Density, insT: Int = 0, insB: Int = 0): IntOffset {
     val m = with(d) { 8.dp.toPx() }
     val r = spec.anchor; val pw = size.width; val ph = size.height
     var left = when (spec.align) { "left" -> r.left; "right" -> r.right - pw; else -> r.center.x - pw / 2f }
     left = left.coerceIn(m, (screen.width - pw - m).coerceAtLeast(m))
+    // 상태 표시줄·내비게이션 바는 피해서
+    val lo = insT + m; val hi = screen.height - insB - m
     var top = r.bottom + m
-    if (top + ph > screen.height - m && r.top - ph - m > m) top = r.top - ph - m
-    top = top.coerceIn(m, (screen.height - ph - m).coerceAtLeast(m))
+    if (top + ph > hi && r.top - ph - m > lo) top = r.top - ph - m
+    top = top.coerceIn(lo, (hi - ph).coerceAtLeast(lo))
     return IntOffset(left.roundToInt(), top.roundToInt())
 }
 
@@ -219,7 +225,7 @@ private fun BoxScope.ToastBox(t: ToastSpec) {
     LaunchedEffect(t.id) {
         a.animateTo(1f, tween(300, easing = Spring)); delay(t.ms); a.animateTo(0f, tween(160)); if (Overlay.toast?.id == t.id) Overlay.toast = null
     }
-    Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp)
+    Row(Modifier.align(Alignment.BottomCenter).windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.systemBars).padding(bottom = 28.dp)
         .graphicsLayer { alpha = a.value.coerceIn(0f, 1f); translationY = (1 - a.value) * 10.dp.toPx() }
         .background(T.floatBg, CircleShape).padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         BasicText(t.msg, style = txt(14.sp, 400, T.floatFg))

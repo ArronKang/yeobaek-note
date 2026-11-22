@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -143,6 +145,7 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
     val scope = rememberCoroutineScope()
     val d = LocalDensity.current
     var closeJob by remember { mutableStateOf<Job?>(null) }
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
 
     fun closeCard() { ed.card = null; ed.view?.setCard(-1, -1) }
 
@@ -164,7 +167,7 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
         object : DocView.Host {
             override fun onPage(n: Int, changed: Boolean) { if (changed) { ed.page = n; ed.chipT = System.currentTimeMillis() } }
             override fun onTools() { ed.rev++ }
-            override fun onAnyDown() { Overlay.closePop(); if (ed.card != null && !(ed.card!!.dragging)) closeCard(); ed.edit?.let { e -> ed.edit = null; ed.view?.commitText(e.pi, e.t, e.isNew) } }
+            override fun onAnyDown() { focus.clearFocus(); Overlay.closePop(); if (ed.card != null && !(ed.card!!.dragging)) closeCard(); ed.edit?.let { e -> ed.edit = null; ed.view?.commitText(e.pi, e.t, e.isNew) } }
             override fun quizCard(pi: Int, idx: Int, x: Float, y: Float, press: Boolean) {
                 ed.card = Card(pi, idx, x, y, press)
                 ed.view?.setCard(pi, idx)
@@ -337,6 +340,7 @@ private fun toggleDark(ed: Ed) { Y.settings.dark = if (Y.isDark()) "off" else "o
 /* =============== 도구줄 =============== */
 @Composable
 private fun Tools(ed: Ed, doc: Doc) {
+    ed.rev; Y.mode; Y.setRev   // 기록·선택·모드가 바뀌면 다시 그림
     val v = ed.view ?: return
     fun setMode(m: String) { if (Y.mode == "lasso" && m != "lasso") v.clearSel(); Y.mode = m; Overlay.closePop(); ed.rev++ }
     when (ed.tab) {
@@ -624,7 +628,7 @@ private fun PageChip(ed: Ed, doc: Doc) {
         if (ed.chipT == 0L) return@LaunchedEffect
         a.animateTo(1f, tween(350, easing = Out)); delay(1600); a.animateTo(0f, tween(350, easing = Out))
     }
-    Box(Modifier.fillMaxSize().padding(bottom = 28.dp), contentAlignment = Alignment.BottomCenter) {
+    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars).padding(bottom = 28.dp), contentAlignment = Alignment.BottomCenter) {
         Box(Modifier.graphicsLayer { alpha = if (ed.pulling) 0f else a.value; translationY = (1 - a.value) * 10.dp.toPx() }
             .background(T.floatBg.copy(alpha = .92f), CircleShape).padding(horizontal = 14.dp, vertical = 6.dp)) {
             BasicText("${ed.page + 1} / ${doc.pages.size}", style = txt(12.sp, 500, T.floatFg))
@@ -647,9 +651,9 @@ private fun PageSidebar(ed: Ed, doc: Doc, statusTop: androidx.compose.ui.unit.Dp
         .graphicsLayer { translationX = -(1 - a) * size.width; alpha = a }
         .shadow(12.dp, RoundedCornerShape(topEnd = 14.dp, bottomEnd = 14.dp)).background(T.glass.copy(alpha = .94f), RoundedCornerShape(topEnd = 14.dp, bottomEnd = 14.dp))) {
         LazyColumn(state = st, contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            itemsIndexed(doc.pages, key = { i, p -> System.identityHashCode(p) * 31 + i }) { i, pg ->
+            itemsIndexed(doc.pages.toList(), key = { i, p -> System.identityHashCode(p) * 31 + i }) { i, pg ->
                 val wpx = with(d) { 116.dp.roundToPx() }
-                val bm = remember(pg, ed.rev, Y.setRev, i) { runCatching { v.thumb(i, wpx) }.getOrNull() }
+                val bm = remember(pg, ed.rev, Y.setRev, i) { if (i < doc.pages.size) runCatching { v.thumb(i, wpx) }.getOrNull() else null }
                 var bounds by remember { mutableStateOf(Rect.Zero) }
                 Column(Modifier.onGloballyPositioned { bounds = it.boundsInRoot() }
                     .pointerInput(i, doc.type) {
@@ -670,17 +674,18 @@ private fun PageSidebar(ed: Ed, doc: Doc, statusTop: androidx.compose.ui.unit.Dp
 
 private fun pageMenu(r: Rect, v: DocView, i: Int, ed: Ed) {
     val pages = v.doc.pages
+    if (i !in pages.indices) return
     fun after() { v.pagesChanged(); ed.rev++ }
     Overlay.popover("pm$i", r, 200.dp, "left") {
         PItem("복제", "dup") {
-            Overlay.closePop(); val pg = pages[i]
+            Overlay.closePop(); val pg = pages.getOrNull(i) ?: return@PItem
             pages.add(i + 1, kr.yeobaek.note.data.Page(pg.ratio, pg.tpl, pg.strokes.map { it.copyDeep() }.toMutableList(), pg.texts.map { kr.yeobaek.note.data.TextBox(Y.uid(), it.x, it.y, it.w, it.fs, it.c, it.t) }.toMutableList()))
             after()
         }
         PItem("템플릿 변경", "template") { Overlay.closePop(); Nav.scope.launch { delay(160); tplPop(r, v, i) { ed.rev++ } } }
-        PItem("위로 이동", "up", enabled = i > 0) { Overlay.closePop(); val t = pages[i]; pages[i] = pages[i - 1]; pages[i - 1] = t; after() }
-        PItem("아래로 이동", "down", enabled = i < pages.size - 1) { Overlay.closePop(); val t = pages[i]; pages[i] = pages[i + 1]; pages[i + 1] = t; after() }
-        PItem("삭제", "trash", color = null) { Overlay.closePop(); if (pages.size < 2) { Y.haptic(20); return@PItem }; pages.removeAt(i); after() }
+        PItem("위로 이동", "up", enabled = i > 0) { Overlay.closePop(); if (i !in pages.indices) return@PItem; val t = pages[i]; pages[i] = pages[i - 1]; pages[i - 1] = t; after() }
+        PItem("아래로 이동", "down", enabled = i < pages.size - 1) { Overlay.closePop(); if (i + 1 !in pages.indices) return@PItem; val t = pages[i]; pages[i] = pages[i + 1]; pages[i + 1] = t; after() }
+        PItem("삭제", "trash", color = null) { Overlay.closePop(); if (pages.size < 2 || i !in pages.indices) { Y.haptic(20); return@PItem }; pages.removeAt(i); after() }
     }
 }
 
