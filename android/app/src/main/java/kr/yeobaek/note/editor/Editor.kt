@@ -226,10 +226,10 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
         val leftPane = @Composable { m: Modifier ->
             androidx.compose.runtime.key(open.key) {
                 AndroidView(
-                    factory = { ctx -> DocView(ctx, doc, hostL).also { v -> ed.left = v; ed.view = v; v.restore(open.zoom, open.scroll) } },
+                    factory = { ctx -> DocFrame(ctx, DocView(ctx, doc, hostL).also { v -> ed.left = v; ed.view = v; v.restore(open.zoom, open.scroll) }) },
                     modifier = m.clipToBounds().onGloballyPositioned { c -> ed.left?.let { val o = c.boundsInRoot(); it.rootX = o.left; it.rootY = o.top } },
-                    update = { it.topPad = topPad },
-                    onRelease = { v -> open.scroll = v.sy; open.zoom = v.zoom; v.release(); if (ed.left === v) ed.left = null; if (ed.view === v) ed.view = null },
+                    update = { it.view.topPad = topPad },
+                    onRelease = { f -> val v = f.view; open.scroll = v.sy; open.zoom = v.zoom; f.release(); if (ed.left === v) ed.left = null; if (ed.view === v) ed.view = null },
                 )
             }
         }
@@ -248,10 +248,10 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
                 val rightPane = @Composable { m: Modifier ->
                     androidx.compose.runtime.key(sd) {
                         AndroidView(
-                            factory = { ctx -> DocView(ctx, sd, hostR).also { v -> ed.right = v; ed.view = v; v.restore("width", 0f) } },
+                            factory = { ctx -> DocFrame(ctx, DocView(ctx, sd, hostR).also { v -> ed.right = v; ed.view = v; v.restore("width", 0f) }) },
                             modifier = m.clipToBounds().onGloballyPositioned { c -> ed.right?.let { val o = c.boundsInRoot(); it.rootX = o.left; it.rootY = o.top } },
-                            update = { it.topPad = topPad },
-                            onRelease = { v -> v.release(); if (ed.right === v) ed.right = null; if (ed.view === v) ed.view = ed.left },
+                            update = { it.view.topPad = topPad },
+                            onRelease = { f -> val v = f.view; f.release(); if (ed.right === v) ed.right = null; if (ed.view === v) ed.view = ed.left },
                         )
                     }
                 }

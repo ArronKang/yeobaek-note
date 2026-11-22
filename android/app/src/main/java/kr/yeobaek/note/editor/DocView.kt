@@ -66,6 +66,14 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
 
     /** 이 칸의 화면(루트) 위치: 정답 카드·글상자를 겹쳐 그릴 때 */
     var rootX = 0f; var rootY = 0f
+    /** 저지연 필기 층 (DocFrame이 붙여 줌) */
+    var front: FrontInk? = null
+    private fun frontOn() = front?.ok == true
+    /** 펜을 뗀 뒤: 아래 화면이 같은 획을 그릴 때까지 몇 프레임 기다렸다가 지움 */
+    private fun clearFrontLater() {
+        val f = front ?: return
+        postOnAnimation { postOnAnimation { postOnAnimation { f.clear() } } }
+    }
     private val dens = resources.displayMetrics.density
     private fun dp(v: Float) = v * dens
     private val ACT_W get() = dp(794f)
@@ -719,6 +727,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         var liveBaked = false; var baked = 0
         var erased = false
         var jumps = 0
+        var frontTo = 0
         val touched = ArrayList<Stroke>()
         var lastX = 0f; var lastY = 0f
     }
@@ -841,6 +850,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         if (pen.kind == "pen") st.live = true
         c.st = st
         if (tool == "pen") { predictor = predictor ?: runCatching { MotionEventPredictor.newInstance(this) }.getOrNull(); predictor?.record(ev) }
+        // 프레임마다 모아서 받지 말고 펜 움직임을 오는 즉시 받기 (지연 줄이기)
+        if (pen.kind == "pen") runCatching { requestUnbufferedDispatch(ev) }
         if (pen.kind == "pen") startLP(id, x, y)
         invalidate()
     }
@@ -901,7 +912,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             // 압력 흔들림 완화 (지수 평활)
             pt[2] = ((last[2] * 0.6f + pt[2] * 0.4f) * 100).roundToInt() / 100f
             val d = hypot(pt[0] - last[0], pt[1] - last[1])
-            if (d < 0.0005f) return
+            // 너무 가까운 점은 버림: 즉시 받기로 점이 촘촘해져도 방향·속도(굵기)가 흔들리지 않게 (화면 1.5px)
+            if (d < max(0.0005f, dp(0.75f) / W)) return
             // 갑자기 멀리 튄 점(센서 노이즈)은 버림. 단 다음 점도 그쪽이면 진짜 움직임(화면이 잠깐 바빴던 것)으로 보고 이어 그림
             if (d > 0.12f && st.p.size > 1 && c.jumps++ < 1) return
             c.jumps = 0
@@ -911,6 +923,18 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         addPt(x, y, ev.getPressure(i))
         // 볼펜·만년필은 지나간 마디를 바로 캐시에 구워서 매 프레임 다시 그리지 않음
         if (st.t == "pen") bakeLive(c, st)
+        if (st.t == "pen" && frontOn()) {
+            // 모양이 정해진 마디(..n-2)를 화면 합성을 거치지 않고 바로 그림
+            val n = st.p.size
+            if (n >= 2 && c.frontTo < n - 1) {
+                val snap = Stroke(st.t, st.c, st.s, st.a, st.k, ArrayList(st.p)).also { it.live = true }
+                front!!.draw(FrontInk.Seg(snap, c.frontTo, n - 1, pageLeft(), pageTop(c.pi), W, Paper.c().dark && doc.type != "pdf", ev.eventTime))
+                c.frontTo = n - 1
+            }
+            main.removeCallbacks(snapRun)
+            if (YY.settings.snap && st.p.size > 8) main.postDelayed(snapRun, 600)
+            return
+        }
         if (isPen && st.t == "pen") {
             predictor?.record(ev)
             c.pred = predictor?.predict()?.let { pe ->
@@ -928,7 +952,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     private val snapRun = Runnable {
         val c = cur ?: return@Runnable; val st = c.st ?: return@Runnable
         val np = Ink.detectShape(st.p) ?: return@Runnable
-        c.snapOld = st.p; st.p = np; c.snapped = true; c.liveBaked = false; c.pred = null; dirty(c.pi); YY.haptic(15)
+        c.snapOld = st.p; st.p = np; c.snapped = true; c.liveBaked = false; c.pred = null; dirty(c.pi); invalidate(); clearFrontLater(); YY.haptic(15)
     }
 
     /** 다음 점이 와서 모양이 정해진 마디(0..n-2)만 캐시에 굽고, 끝 마디는 화면에만 */
@@ -973,6 +997,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         if (c.id != id) return
         main.removeCallbacks(snapRun)
         cur = null
+        clearFrontLater()
         val pg = doc.pages[c.pi]
         when {
             c.move != null -> { val s = sel; if (s != null && abs(c.mdx) + abs(c.mdy) > 0.0005f) { val l = s.strokes.toList(); val dx = c.mdx; val dy = c.mdy; pushHist(c.pi, { Ink.move(l, -dx, -dy); sel?.let { it.box = Ink.bbox(it.strokes) } }, { Ink.move(l, dx, dy) }) }; invalidate() }
@@ -1103,7 +1128,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         val hit = QuizLayout.pressHit(doc, pi, u, v) ?: return
         YY.haptic(15)
         // 누르는 동안 찍힌 점·스크롤은 없던 일로
-        cur?.takeIf { it.id == id }?.let { c -> cur = null; if (c.liveBaked) dirty(c.pi) }
+        cur?.takeIf { it.id == id }?.let { c -> cur = null; if (c.liveBaked) dirty(c.pi); clearFrontLater() }
         if (scrolling?.id == id) scrolling = null
         cardDragId = id
         host.quizCard(pi, hit.idx, lpX, lpY, true)

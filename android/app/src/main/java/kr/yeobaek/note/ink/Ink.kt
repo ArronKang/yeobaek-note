@@ -20,10 +20,10 @@ import kotlin.math.sin
 
 /** 획 그리기와 기하 (engine.js의 drawStroke, segWidth, 지우개, 올가미, 모양 보정) */
 object Ink {
-    private val colorCache = HashMap<String, Int>()
+    private val colorCache = java.util.concurrent.ConcurrentHashMap<String, Int>()
     fun parse(c: String): Int = colorCache.getOrPut(c) { runCatching { Color.parseColor(if (c.startsWith("#")) c else "#$c") }.getOrDefault(Color.BLACK) }
 
-    private val lightCache = HashMap<String, Int>()
+    private val lightCache = java.util.concurrent.ConcurrentHashMap<String, Int>()
     /** 어두운 종이: 검정 펜은 흰색, 색 펜은 38% 밝게 (저장된 색은 그대로) */
     fun strokeColor(st: Stroke, dark: Boolean): Int {
         if (!dark) return parse(st.c)
@@ -64,8 +64,9 @@ object Ink {
         }
     }
 
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val path = Path()
+    // 저지연 층(그리기 스레드)과 화면(메인 스레드)이 동시에 그리므로 붓·경로는 스레드마다 따로
+    private val tlPaint = ThreadLocal.withInitial { Paint(Paint.ANTI_ALIAS_FLAG) }
+    private val tlPath = ThreadLocal.withInitial { Path() }
 
     /**
      * @param K 페이지 너비(픽셀). 좌표 = 정규화 값 × K
@@ -73,6 +74,7 @@ object Ink {
      */
     fun draw(cv: Canvas, st: Stroke, K: Float, dark: Boolean, from: Int = 0, alphaMul: Float = 1f, to: Int = Int.MAX_VALUE) {
         val P = st.p; val n = P.size; if (n == 0) return
+        val paint = tlPaint.get()!!; val path = tlPath.get()!!
         paint.reset(); paint.isAntiAlias = true
         paint.color = strokeColor(st, dark)
         paint.strokeJoin = Paint.Join.ROUND
