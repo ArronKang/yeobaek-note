@@ -15,6 +15,11 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.background
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,9 +60,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         Y.init(this)
         enableEdgeToEdge()
-        handleIntent(intent)
+        if (savedInstanceState != null) Nav.restoreState(savedInstanceState) else handleIntent(intent)
         setContent { App() }
     }
+
+    override fun onSaveInstanceState(outState: Bundle) { super.onSaveInstanceState(outState); Nav.saveState(outState) }
 
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handleIntent(intent) }
 
@@ -79,6 +86,15 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         Nav.tabs.forEach { runCatching { Docs.save(it.doc) } }
+    }
+
+    /** 화면을 떠났거나 메모리가 부족하면 페이지 그림을 내려놓음 (돌아오면 다시 그림) → 시스템이 앱을 덜 정리함 */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN || level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW || level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            kr.yeobaek.note.editor.DocView.trimAll()
+            kr.yeobaek.note.quiz.QuizLayout.clearCache()
+        }
     }
 
     @androidx.compose.runtime.Composable
@@ -159,6 +175,9 @@ class MainActivity : ComponentActivity() {
                         transformOrigin = TransformOrigin(.5f, .3f)
                     }) { androidx.compose.runtime.key(cur.key) { EditorScreen(cur, onExport) } }
                 }
+                // 상태 표시줄 자리: 앱 화면과 겹치지 않게 단색 배경
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars)
+                    .background(if (Nav.inEditor) androidx.compose.ui.graphics.Color(kr.yeobaek.note.ink.Paper.c().desk) else tok.bg))
                 OverlayHost()
             }
         }

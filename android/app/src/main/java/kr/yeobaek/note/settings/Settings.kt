@@ -60,6 +60,7 @@ private fun SettingsPage(close: () -> Unit) {
             R("손바닥 무시") { Seg(S.palm, listOf("weak" to "약", "mid" to "중", "strong" to "강")) { S.palm = it; save() } }
             H("화면")
             R("다크 모드") { Seg(S.dark, listOf("off" to "끔", "on" to "켬", "auto" to "기기")) { S.dark = it; redraw() } }
+            R("도구 막대 투명도") { Seg(S.glass, listOf("clear" to "투명", "mid" to "반투명", "solid" to "불투명")) { S.glass = it; save() } }
             R("종이 색") { Seg(S.paper, listOf("white" to "흰색", "gray" to "회색")) { S.paper = it; redraw() } }
             R("펜 칸 개수") {
                 Row(verticalAlignment = Alignment.CenterVertically) {

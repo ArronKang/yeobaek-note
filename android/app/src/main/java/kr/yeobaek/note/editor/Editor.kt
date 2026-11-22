@@ -303,6 +303,9 @@ private fun act(ed: Ed, c: Card, v: String) {
     c.v.quizRepaint(); ed.card = null; c.v.setCard(-1, -1); ed.rev++
 }
 
+/** 도구 막대 유리판 색: 설정의 투명도 */
+@Composable fun glassColor(): Color { Y.setRev; return T.glass.copy(alpha = when (Y.settings.glass) { "clear" -> .45f; "solid" -> 1f; else -> .72f }) }
+
 /* =============== 상단 =============== */
 @Composable
 private fun Chrome(ed: Ed, open: OpenDoc, statusTop: androidx.compose.ui.unit.Dp, onExport: (Doc, DocView) -> Unit) {
@@ -313,7 +316,7 @@ private fun Chrome(ed: Ed, open: OpenDoc, statusTop: androidx.compose.ui.unit.Dp
     LaunchedEffect(ed.collapsed) { hide.animateTo(if (ed.collapsed) 1f else 0f, tween(380, easing = Out)) }
     var h by remember { mutableFloatStateOf(0f) }
     val glass = Modifier.shadow(12.dp, RoundedCornerShape(18.dp), ambientColor = Color(0x1A212529), spotColor = Color(0x1A212529))
-        .background(T.glass, RoundedCornerShape(18.dp)).border(.5.dp, T.glassEdge, RoundedCornerShape(18.dp))
+        .background(glassColor(), RoundedCornerShape(18.dp)).border(.5.dp, T.glassEdge, RoundedCornerShape(18.dp))
 
     // 블라인드처럼: 빈 곳을 잡고 위로 끌면 숨음
     Column(Modifier.fillMaxWidth().padding(top = statusTop + 8.dp, start = 8.dp, end = 8.dp)
@@ -360,7 +363,7 @@ private fun Chrome(ed: Ed, open: OpenDoc, statusTop: androidx.compose.ui.unit.Dp
         var dy by remember { mutableFloatStateOf(0f) }
         Box(Modifier.fillMaxWidth().padding(top = statusTop + 10.dp, end = 12.dp), contentAlignment = Alignment.TopEnd) {
             Box(Modifier.offset { IntOffset(0, dy.roundToInt()) }.size(40.dp)
-                .shadow(8.dp, CircleShape).background(T.glass, CircleShape).border(.5.dp, T.glassEdge, CircleShape)
+                .shadow(8.dp, CircleShape).background(glassColor(), CircleShape).border(.5.dp, T.glassEdge, CircleShape)
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(onDragEnd = { if (dy > 30.dp.toPx()) { ed.collapsed = false; Y.haptic(8) }; dy = 0f }) { _, a -> dy = (dy + a).coerceIn(0f, 80.dp.toPx()) }
                 }

@@ -119,6 +119,7 @@ class Settings(
     var trashDays: Int = 30,
     var hlSnap: Boolean = true,
     var dark: String = "off",       // off | on | auto
+    var glass: String = "mid",      // 도구 막대: clear(투명) | mid(반투명) | solid(불투명)
 )
 
 @Serializable

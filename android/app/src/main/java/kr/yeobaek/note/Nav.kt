@@ -65,6 +65,38 @@ object Nav {
 
     fun closeEditor() { Overlay.closePop(); inEditor = false; Y.libRev++ }
 
+    /* ---------- 시스템이 앱을 정리했다가 다시 열 때: 열어 둔 문서로 ---------- */
+    /** 지금 열린 탭(서재 id)과 보고 있던 탭을 Bundle에 */
+    fun saveState(b: android.os.Bundle) {
+        b.putStringArrayList("tabs", ArrayList(tabs.mapNotNull { it.doc.libId ?: it.doc.id }))
+        b.putString("cur", cur?.let { it.doc.libId ?: it.doc.id })
+        b.putBoolean("inEditor", inEditor)
+        b.putFloat("scroll", cur?.scroll ?: 0f)
+    }
+    fun restoreState(b: android.os.Bundle) {
+        if (tabs.isNotEmpty()) return
+        val ids = b.getStringArrayList("tabs") ?: return
+        val curId = b.getString("cur"); val wasIn = b.getBoolean("inEditor")
+        val metas = ids.mapNotNull { id -> Y.lib.notes.find { it.id == id && !it.trashed } }
+        if (metas.isEmpty()) return
+        // 다른 탭을 먼저, 보고 있던 탭을 마지막에 열어서 그 탭이 앞에 오게
+        val ordered = metas.filter { it.id != curId } + metas.filter { it.id == curId }
+        fun next(i: Int) {
+            if (i >= ordered.size) { if (!wasIn) closeEditor(); return }
+            val m = ordered[i]
+            load(m) { d ->
+                if (d != null) { val k = keyOf(d); if (tabs.none { it.key == k }) tabs.add(OpenDoc(k, d)) }
+                if (i == ordered.size - 1) {
+                    tabs.find { (it.doc.libId ?: it.doc.id) == m.id }?.let { t ->
+                        if (m.id == curId) t.scroll = b.getFloat("scroll"); cur = t; inEditor = wasIn; editorRev++
+                    }
+                }
+                next(i + 1)
+            }
+        }
+        next(0)
+    }
+
     /** 노트가 지워졌으면 탭도 정리 */
     fun pruneTabs() {
         tabs.removeAll { t -> t.doc.type != "pdf" && Y.lib.notes.none { it.id == t.doc.id && !it.trashed } }

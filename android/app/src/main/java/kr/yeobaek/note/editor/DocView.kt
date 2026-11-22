@@ -141,9 +141,32 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     /** 리스트가 바뀐 뒤 (페이지 추가·삭제·순서) */
     fun rebuild() { layoutTops(); clampScroll(); dropCaches(); updatePageIdx(); invalidate(); host.onTools() }
 
+    /* ---------- 페이지 자석 ---------- */
+    /** 페이지가 화면에 거의 다 들어오면 페이지 단위로 붙음 (크게 확대해서 페이지가 화면보다 훨씬 크면 자유 스크롤) */
+    fun paged(): Boolean = doc.pages.isNotEmpty() && W <= width + 1 && pageH(pageIdx.coerceIn(0, doc.pages.size - 1)) <= (height - topPad) * 1.3f
+    /** i쪽이 도구 막대 바로 아래에 오는 위치 (마지막 쪽은 더 내려가지 않음) */
+    private fun snapY(i: Int) = (tops[i] - topPad).coerceIn(0f, maxSy)
+    /**
+     * 놓았을 때: 세게 튕겼으면 누르기 시작한 페이지의 다음·이전 쪽으로, 아니면 가장 가까운 쪽에 붙음
+     * @param vy 손을 뗄 때 속도 (픽셀/ms, +면 아래 페이지 쪽) @param startSy 누르기 시작할 때 위치
+     */
+    private fun snapTo(vy: Float, startSy: Float) {
+        if (tops.isEmpty()) return
+        val near = { y: Float -> doc.pages.indices.minBy { abs(snapY(it) - y) } }
+        val from = near(startSy)
+        val i = when {
+            vy > 0.35f * dens -> (from + 1).coerceAtMost(doc.pages.size - 1)
+            vy < -0.35f * dens -> (from - 1).coerceAtLeast(0)
+            else -> near(sy)
+        }
+        val target = snapY(i)
+        if (abs(target - sy) < 1f) { sy = target; afterScroll(); return }
+        animateScroll(target)
+    }
+
     fun scrollToPage(i: Int, smooth: Boolean = true, offsetU: Float = 0f) {
         if (i !in doc.pages.indices) return
-        val target = (tops[i] + offsetU * W - topPad + dp(8f)).coerceIn(0f, maxSy)
+        val target = (tops[i] + offsetU * W - topPad).coerceIn(0f, maxSy)
         if (!smooth) { sy = target; afterScroll(); return }
         animateScroll(target)
     }
@@ -247,7 +270,9 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         if (pdfW[i] == wPx && (pdfBm[i] != null || pdfJobs[i] != null)) return
         pdfJobs[i]?.cancel(); pdfW[i] = wPx
         pdfJobs[i] = src.render(i, wPx) { bm ->
-            pdfJobs.remove(i); pdfBm.put(i, bm)?.recycle(); dirty(i)
+            pdfJobs.remove(i)
+            if (!caches.containsKey(i)) { bm.recycle(); pdfW.remove(i); return@render }   // 그새 화면에서 벗어난 쪽
+            pdfBm.put(i, bm)?.recycle(); dirty(i)
         }
     }
 
@@ -356,7 +381,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         // 안 보이는 페이지는 메모리에서 내림
         val drop = caches.keys.filter { it !in keep }
         drop.forEach { caches.remove(it)?.bm?.recycle() }
-        if (doc.type == "pdf") pdfBm.keys.filter { it !in keep && abs(it - pageIdx) > 3 }.forEach { pdfBm.remove(it)?.recycle(); pdfW.remove(it); pdfJobs.remove(it)?.cancel() }
+        // PDF 원본 그림은 곧 보일 쪽(위아래 반 화면 안)만 남김: 한 쪽 14MB라 많이 들고 있으면 메모리가 큼
+        if (doc.type == "pdf") pdfBm.keys.filter { it !in keep }.forEach { pdfBm.remove(it)?.recycle(); pdfW.remove(it); pdfJobs.remove(it)?.cancel() }
         if (anims.isNotEmpty()) {
             val now = SystemClock.uptimeMillis()
             anims.removeAll { now - it.t0 > 700 }
@@ -1001,12 +1027,14 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             if (!cancel && now - S.ts < 350 && hypot(x - S.x0, y - S.y0) < dp(10f) && doc.type == "quiz") {
                 val pi = hitPage(x, y); if (pi >= 0 && quizTap(pi, x, y)) return
             }
-            if (pullRaw != 0f) { pullRelease(); return }
+            if (pullRaw != 0f) { pullRelease(); snapTo(0f, S.t0); return }
             val rel = (now - S.ts).toFloat(); val hs = S.hist.filter { rel - it[2] < 100 }
+            var vx = 0f; var vy = 0f
             if (hs.size >= 2 && !cancel) {
                 val a = hs.first(); val b = hs.last(); val dt = max(8f, b[2] - a[2])
-                glide(-(b[0] - a[0]) / dt, -(b[1] - a[1]) / dt)
+                vx = -(b[0] - a[0]) / dt; vy = -(b[1] - a[1]) / dt
             }
+            if (paged()) snapTo(vy, S.t0) else glide(vx, vy)
             return
         }
         val c = cur ?: return
@@ -1193,6 +1221,22 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         if (t.t.isBlank()) { pg.texts.remove(t) }
         else if (isNew) pushHist(pi, { pg.texts.remove(t) }, { if (t !in pg.texts) pg.texts.add(t) })
         editing = null; textCache.clear(); dirty(pi); queueSave()
+    }
+
+    /** 화면을 떠났을 때(백그라운드·메모리 부족): 다시 그릴 수 있는 그림은 모두 내려놓음 */
+    fun trim() {
+        dropCaches()
+        pdfJobs.values.forEach { it.cancel() }; pdfJobs.clear(); pdfW.clear()
+        pdfBm.values.forEach { it.recycle() }; pdfBm.clear()
+        sharp?.recycle(); sharp = null; sharpKey = ""
+        textCache.clear()
+    }
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); live.add(this) }
+    override fun onDetachedFromWindow() { live.remove(this); super.onDetachedFromWindow() }
+    companion object {
+        /** 지금 떠 있는 필기 화면들 (메모리 정리용) */
+        val live: MutableSet<DocView> = java.util.Collections.newSetFromMap(java.util.WeakHashMap())
+        fun trimAll() { live.toList().forEach { it.trim(); it.invalidate() } }
     }
 
     /** 탭을 다시 열 때: 보던 확대와 위치로 */
