@@ -70,10 +70,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     var front: FrontInk? = null
     private fun frontOn() = front?.ok == true
     /** 펜을 뗀 뒤: 아래 화면이 같은 획을 그릴 때까지 몇 프레임 기다렸다가 지움 */
-    private fun clearFrontLater() {
-        val f = front ?: return
-        postOnAnimation { postOnAnimation { postOnAnimation { f.clear() } } }
-    }
+    private fun clearFrontLater() { front?.clearSoon() }
     private val dens = resources.displayMetrics.density
     private fun dp(v: Float) = v * dens
     private val ACT_W get() = dp(794f)
@@ -84,7 +81,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     var W = 0f; private set
     var topPad = dp(96f)
         set(v) { if (field != v) { field = v; if (width > 0) relayout(null) } }
-    private val bottomPad get() = dp(120f)
+    private val bottomPad get() = dp(24f)   // 끝 페이지가 화면 아래에 딱 맞게 (빈 책상 없이)
     private val gap get() = dp(14f)
     private var tops = FloatArray(0)
     private var contentH = 0f
@@ -94,7 +91,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
 
     fun pageH(i: Int) = W * doc.pages[i].ratio
     fun pageLeft(): Float = if (W < width) (width - W) / 2f else -sx
-    fun pageTop(i: Int): Float = tops[i] - sy - pullV
+    fun pageTop(i: Int): Float = tops[i] - sy   // 끝에서 더 밀어도 페이지는 고정
     private val addBtnH get() = 0f   // 웹 최종 디자인: + 버튼 없이 고무줄로만 새 페이지
     private val maxSy get() = max(0f, contentH - height)
     private val maxSx get() = max(0f, W - width)
@@ -596,7 +593,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             val t0 = sy
             sx += vx * dt; sy += vy * dt; clampScroll()
             // 벽에 부딪힘: 남은 속도만큼 눌렸다가 튕겨 나옴
-            if (abs(vy) > 0.4f * dens && abs(sy - t0) < abs(vy * dt) * 0.5f) { glideRun = null; bounce(sign(vy) * min(90f, abs(vy) / dens * 45f)); afterScroll(); return }
+            if (abs(vy) > 0.4f * dens && abs(sy - t0) < abs(vy * dt) * 0.5f) { glideRun = null; afterScroll(); return }   // 벽: 출렁이지 않고 멈춤
             afterScroll()
             if (hypot(vx, vy) < 0.02f * dens) { glideRun = null; return }
             postOnAnimation(this)
@@ -630,34 +627,25 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         host.onPull(pullV != 0f)
         invalidate()
     }
+    /** 노트 끝에서 더 당기면: 페이지는 그대로, 아래에 + 고리만 차오름 (다 차면 톡, 놓으면 새 페이지) */
     private fun drawPull(cv: Canvas, c: PaperColors) {
         if (!(doc.type == "note" && pullV > 0 && !bouncing)) return
         val k = min(1f, pullV / ARM)
-        val room = bottomPad + pullV - dp(24f)
-        val left = pageLeft()
-        val bottom = height - dp(16f)
-        val fr = RectF(left, bottom - max(0f, room), left + W, bottom)
-        p.reset(); p.isAntiAlias = true
-        val alpha = (min(1f, k * 1.6f) * 255).toInt()
-        if (pullArmed) {
-            p.color = c.paper; p.alpha = alpha; cv.drawRoundRect(fr, dp(4f), dp(4f), p)
-            p.style = Paint.Style.STROKE; p.strokeWidth = dp(.5f); p.color = if (c.dark) 0x1AFFFFFF else 0x1F212529; cv.drawRoundRect(fr, dp(4f), dp(4f), p)
-        } else {
-            p.style = Paint.Style.STROKE; p.strokeWidth = dp(1.5f); p.color = if (c.dark) 0xFF45474E.toInt() else 0xFFCED4DA.toInt(); p.alpha = alpha
-            p.pathEffect = DashPathEffect(floatArrayOf(dp(5f), dp(4f)), 0f); cv.drawRoundRect(fr, dp(4f), dp(4f), p); p.pathEffect = null
-        }
-        // + 와 둘레 고리
-        val cy = height - max(dp(8f), room / 2 - dp(20f)) - dp(20f); val cx = left + W / 2
+        val cx = pageLeft() + W / 2; val cy = height - dp(72f) - dp(24f) * k
         val s = (0.45f + 0.55f * k) * (if (pullArmed) 1.14f else 1f)
         cv.save(); cv.translate(cx, cy); cv.scale(s, s)
-        val r = dp(17f)
-        p.reset(); p.isAntiAlias = true; p.style = Paint.Style.STROKE; p.strokeWidth = dp(2f)
+        val r = dp(22f)
+        p.reset(); p.isAntiAlias = true
+        // 종이 위에서도 보이게 받침 원
+        p.style = Paint.Style.FILL; p.color = if (c.dark) 0xF02B2C31.toInt() else 0xF2FFFFFF.toInt(); p.alpha = (min(1f, k * 2f) * 240).toInt(); cv.drawCircle(0f, 0f, r + dp(6f), p)
+        p.style = Paint.Style.STROKE; p.strokeWidth = dp(.5f); p.color = if (c.dark) 0x1AFFFFFF else 0x1F212529; cv.drawCircle(0f, 0f, r + dp(6f), p)
+        p.strokeWidth = dp(2f)
         if (pullArmed) { p.style = Paint.Style.FILL; p.color = if (c.dark) 0x1CFFFFFF else 0x1A212529; cv.drawCircle(0f, 0f, r, p); p.style = Paint.Style.STROKE }
         p.color = if (c.dark) 0x1AFFFFFF else 0x1F212529; cv.drawCircle(0f, 0f, r, p)
         p.color = c.acc; p.strokeCap = Paint.Cap.ROUND
         cv.drawArc(RectF(-r, -r, r, r), -90f, 360f * k, false, p)
         p.color = if (pullArmed) c.acc else (if (c.dark) 0xFFA4A7B0.toInt() else 0xFF6C757D.toInt())
-        val a = dp(7f); cv.drawLine(-a, 0f, a, 0f, p); cv.drawLine(0f, -a, 0f, a, p)
+        val a = dp(8f); cv.drawLine(-a, 0f, a, 0f, p); cv.drawLine(0f, -a, 0f, a, p)
         cv.restore()
     }
 
@@ -678,15 +666,14 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     private fun pullRelease() {
         val v = pullV; pullRaw = 0f
         if (pullArmed && doc.type == "note") {
-            // 틀이 있던 자리에 진짜 페이지가 생김
-            val frameTop = height - dp(16f) - (bottomPad + pullV - dp(24f))
+            // 새 페이지가 생기고 그 쪽으로 부드럽게
             pullArmed = false; pullV = 0f; paintPull()
             val i = addPage(stay = true)
-            sy = (tops[i] - frameTop).coerceIn(0f, maxSy); afterScroll()
+            scrollToPage(i)
             bornPage = i; bornT = SystemClock.uptimeMillis(); invalidate()
             YY.haptic(10); return
         }
-        spring(v, 0f, null)
+        pullV = 0f; paintPull()   // 페이지가 움직이지 않으니 돌아올 것도 없음
     }
     private var bornPage = -1; private var bornT = 0L
     private fun springEase(t: Float): Float { if (t >= 1f) return 1f; return 1 - (Math.exp(-6.0 * t) * Math.cos(10.0 * t)).toFloat() }
@@ -694,7 +681,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     // 처음 노트 맨 아래에 닿았을 때 한 번: 틀이 살짝 딸려 나왔다 들어감
     private fun pullPeek() {
         if (scrolling != null || springRun != null || Store.flag("pullhint") != null) return
-        Store.setFlag("pullhint", "1"); bouncing = false; spring(0f, 520f * dens, null)
+        Store.setFlag("pullhint", "1"); bouncing = false; spring(0f, 300f * dens, null)
     }
     private fun bounce(push: Float) {
         if (scrolling != null) return
@@ -735,7 +722,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
 
     var penDown = false; private set
     private var lastPen = -1_000_000L
-    private val palmWin get() = when (YY.settings.palm) { "weak" -> 250; "strong" -> 2500; else -> 900 }
+    // 펜을 뗀 뒤 손가락을 무시하는 시간: 길면 필기 직후 터치가 안 먹음 (손바닥은 접촉 면적으로 따로 거름)
+    private val palmWin get() = when (YY.settings.palm) { "weak" -> 80; "strong" -> 500; else -> 200 }
     private fun penRecent() = penDown || SystemClock.uptimeMillis() - lastPen < palmWin
     private fun isPalm(ev: MotionEvent, i: Int) = ev.getToolType(i) == MotionEvent.TOOL_TYPE_FINGER && max(ev.getTouchMajor(i), ev.getTouchMinor(i)) > dp(46f)
 
@@ -787,6 +775,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     private fun down(ev: MotionEvent, i: Int) {
         val id = ev.getPointerId(i); val x = ev.getX(i); val y = ev.getY(i); val tool = toolOf(ev, i)
         host.onAnyDown()
+        front?.clearNow()
         if (tool == "pen") {
             penDown = true; lastPen = SystemClock.uptimeMillis(); haltFingers()
             // 펜보다 먼저 닿은 손바닥이 그린 획은 지움
@@ -997,7 +986,11 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         if (c.id != id) return
         main.removeCallbacks(snapRun)
         cur = null
-        clearFrontLater()
+        // 저지연 층: 최종 모양(끝이 가늘어진 획)으로 한 번에 바꿔 둠 → 아래 화면이 그린 뒤 조용히 지움 (깜박임 없음)
+        c.st?.takeIf { it.t == "pen" && frontOn() && c.frontTo > 0 }?.let { st ->
+            val fin = Stroke(st.t, st.c, st.s, st.a, st.k, ArrayList(st.p))
+            front!!.finish(FrontInk.Seg(fin, 0, Int.MAX_VALUE, pageLeft(), pageTop(c.pi), W, Paper.c().dark && doc.type != "pdf"))
+        } ?: clearFrontLater()
         val pg = doc.pages[c.pi]
         when {
             c.move != null -> { val s = sel; if (s != null && abs(c.mdx) + abs(c.mdy) > 0.0005f) { val l = s.strokes.toList(); val dx = c.mdx; val dy = c.mdy; pushHist(c.pi, { Ink.move(l, -dx, -dy); sel?.let { it.box = Ink.bbox(it.strokes) } }, { Ink.move(l, dx, dy) }) }; invalidate() }

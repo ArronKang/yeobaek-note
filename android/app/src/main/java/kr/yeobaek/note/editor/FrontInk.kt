@@ -29,6 +29,10 @@ class FrontInk(ctx: Context) {
     private var renderer: CanvasFrontBufferedRenderer<Seg>? = null
     var ok = false; private set
     @Volatile private var dirty = false
+    /** 펜을 뗐을 때 여러 버퍼 층에 그릴 최종 획 */
+    @Volatile private var final: Seg? = null
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val clearRun = Runnable { clearNow() }
 
     fun attach() {
         if (renderer != null) return
@@ -40,19 +44,40 @@ class FrontInk(ctx: Context) {
                     canvas.restore()
                 }
                 override fun onDrawMultiBufferedLayer(canvas: Canvas, bufferWidth: Int, bufferHeight: Int, params: Collection<Seg>) {
-                    // 확정된 필기는 아래 DocView가 그림: 이 층은 투명하게
                     canvas.drawColor(Color.TRANSPARENT, BlendMode.CLEAR)
+                    // 펜을 뗀 순간: 앞 버퍼의 획을 최종 모양으로 바꿔 같은 프레임에 보여 줌 (아래 화면이 그릴 때까지)
+                    final?.let { f -> canvas.save(); canvas.translate(f.left, f.top); Ink.draw(canvas, f.st, f.K, f.dark); canvas.restore() }
                 }
             })
         }.getOrNull()
         ok = renderer != null
     }
 
-    fun draw(seg: Seg) { val r = renderer ?: return; dirty = true; r.renderFrontBufferedLayer(seg) }
+    fun draw(seg: Seg) {
+        val r = renderer ?: return
+        // 앞 획을 아직 겹쳐 두고 있으면 먼저 지움 (아래 화면은 이미 그렸음)
+        if (final != null) clearNow()
+        dirty = true; r.renderFrontBufferedLayer(seg)
+    }
 
-    fun clear() { if (!dirty) return; dirty = false; renderer?.clear() }
+    /** 펜을 뗌: 앞 버퍼 내용을 여러 버퍼 층으로 넘기면서 최종 모양으로 (한 번에 바뀜) */
+    fun finish(seg: Seg) {
+        val r = renderer ?: return
+        final = seg; r.commit()
+        main.removeCallbacks(clearRun); main.postDelayed(clearRun, 250)
+    }
 
-    fun release() { renderer?.release(true); renderer = null; ok = false }
+    /** 몇 프레임 뒤 지움 (모양 보정 등) */
+    fun clearSoon() { main.removeCallbacks(clearRun); main.postDelayed(clearRun, 120) }
+
+    fun clearNow() {
+        main.removeCallbacks(clearRun)
+        if (!dirty && final == null) return
+        dirty = false; final = null; renderer?.clear()
+    }
+    fun clear() = clearNow()
+
+    fun release() { main.removeCallbacks(clearRun); renderer?.release(true); renderer = null; ok = false }
 }
 
 /** 필기 화면 + 그 위 저지연 층 (터치는 아래 DocView가 받음) */
