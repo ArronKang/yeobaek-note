@@ -58,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -330,12 +331,14 @@ private fun Chrome(ed: Ed, open: OpenDoc, statusTop: androidx.compose.ui.unit.Dp
                 onDragCancel = { drag = 0f },
             ) { _, dy -> val nd = drag + dy; drag = if (nd < 0) nd else nd * .25f }
         }
-        .padding(horizontal = 6.dp, vertical = 4.dp)) {
-        // 1줄: 뒤로, 문서 탭, 제목, 공유, ⋯
+    ) {
+        var title by remember(open, doc) { mutableStateOf(doc.title) }
+        // 0줄: 크롬 같은 탭 줄
+        TabStrip(title)
+        Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
+        // 1줄: 뒤로, 제목, 공유, ⋯
         Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
-            var title by remember(open, doc) { mutableStateOf(doc.title) }
             IconBtn("back", "라이브러리") { Nav.closeEditor() }
-            DocTabs(title)
             Spacer(Modifier.width(6.dp))
             BasicTextField(title, { title = it; doc.title = it; ed.view?.queueSave() }, Modifier.weight(1f),
                 textStyle = txt(15.sp, 600, T.snow).copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center), singleLine = true,
@@ -358,6 +361,7 @@ private fun Chrome(ed: Ed, open: OpenDoc, statusTop: androidx.compose.ui.unit.Dp
             }
             if (ed.tab == "draw") Tray(ed)
         }
+        }
     }
     // 숨겼을 때: 오른쪽 위 작은 유리 ⋯ (누르거나 아래로 끌면 내려옴)
     if (hide.value > .5f) {
@@ -374,85 +378,115 @@ private fun Chrome(ed: Ed, open: OpenDoc, statusTop: androidx.compose.ui.unit.Dp
     }
 }
 
+/* =============== 크롬 같은 탭 줄 =============== */
+// 맨 위 어두운 띠에 탭이 나란히, 고른 탭은 아래 도구 막대와 한 장으로 이어짐(밑동이 살짝 벌어짐)
 @Composable
-private fun DocTabs(curTitle: String) {
-    if (Nav.tabs.isEmpty()) return
+private fun TabStrip(curTitle: String) {
     val d = LocalDensity.current
-    val gap = with(d) { 4.dp.toPx() }
-    val widths = remember { androidx.compose.runtime.mutableStateMapOf<OpenDoc, Int>() }
-    // 끌어서 자리를 바꾸면 밀려난 이웃 탭이 원래 자리에서 미끄러져 옴
-    val slide = remember { HashMap<OpenDoc, Animatable<Float, androidx.compose.animation.core.AnimationVector1D>>() }
     val scope = rememberCoroutineScope()
+    val dark = Y.isDark()
+    val band = if (dark) Color.Black.copy(alpha = .24f) else Color(0x14212529)
+    val stripH = 42.dp
+    val tabH = 34.dp
+    val padS = 8.dp
+    val plusW = 40.dp
+    val slide = remember { HashMap<OpenDoc, Animatable<Float, androidx.compose.animation.core.AnimationVector1D>>() }
     var dragging by remember { mutableStateOf<OpenDoc?>(null) }
     val dx = remember { Animatable(0f) }
     val dy = remember { Animatable(0f) }
     val tearPx = with(d) { 40.dp.toPx() }
-    Row(Modifier.widthIn(max = 520.dp).horizontalScroll(rememberScrollState()).padding(start = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Nav.tabs.forEach { t ->
-            androidx.compose.runtime.key(t) {
-                val on = Nav.cur === t
-                val me = dragging === t
-                var pressing by remember { mutableStateOf(false) }
-                // 꾹 누르고 있으면 점점 오그라들다가 닫힘
-                val s by animateFloatAsState(if (pressing) .6f else if (me) 1.06f else 1f, tween(if (pressing) 550 else 200, easing = if (pressing) androidx.compose.animation.core.CubicBezierEasing(.5f, 0f, .75f, 0f) else Out), label = "tab")
-                val sl = slide.getOrPut(t) { Animatable(0f) }
-                Box(Modifier.height(32.dp).widthIn(min = 56.dp, max = 160.dp)
-                    .onSizeChanged { widths[t] = it.width }
-                    .zIndex(if (me) 1f else 0f)
-                    .graphicsLayer {
-                        translationX = if (me) dx.value else sl.value
-                        translationY = if (me) dy.value else 0f
-                        scaleX = s; scaleY = s
-                        alpha = (if (pressing) .5f + .5f * ((s - .6f) / .4f) else 1f) * (if (me) 1f - (dy.value / (tearPx * 2.2f)).coerceIn(0f, .6f) else 1f)
-                    }
-                    .clip(CircleShape)
-                    .background(if (on) T.fill2 else T.fill)
-                    .border(.5.dp, if (on) T.ink2.copy(alpha = .35f) else T.hair, CircleShape)
-                    .pointerInput(t) {
-                        detectTapGestures(
-                            onPress = { pressing = true; tryAwaitRelease(); pressing = false },
-                            onLongPress = { Y.haptic(12); pressing = false; Nav.closeTab(t) },
-                            onTap = { Nav.switchTo(t) })
-                    }
-                    // 옆으로 끌면 자리 바꾸기, 아래로 뜯어내면 닫기
-                    .pointerInput(t) {
-                        detectDragGestures(
-                            onDragStart = { pressing = false; dragging = t; scope.launch { dx.snapTo(0f); dy.snapTo(0f) }; Y.haptic(8) },
-                            onDragEnd = {
-                                if (dy.value > tearPx) { Y.haptic(12); dragging = null; Nav.closeTab(t); scope.launch { dx.snapTo(0f); dy.snapTo(0f) } }
-                                else scope.launch {
-                                    launch { dy.animateTo(0f, androidx.compose.animation.core.spring(.7f, 500f)) }
-                                    dx.animateTo(0f, androidx.compose.animation.core.spring(.75f, 500f)); if (dragging === t) dragging = null
-                                }
-                            },
-                            onDragCancel = { scope.launch { launch { dy.animateTo(0f) }; dx.animateTo(0f); dragging = null } },
-                        ) { ch, a ->
-                            ch.consume()
-                            scope.launch {
-                                dy.snapTo((dy.value + a.y).let { if (it < 0) it * .2f else it })
-                                var x = dx.value + a.x
-                                val i = Nav.tabs.indexOf(t)
-                                val w = (widths[t] ?: 0) + gap
-                                val nx = Nav.tabs.getOrNull(i + 1)
-                                val pv = Nav.tabs.getOrNull(i - 1)
-                                if (nx != null && x > ((widths[nx] ?: 0) + gap) / 2f) {
-                                    val nw = (widths[nx] ?: 0) + gap
-                                    Nav.tabs.removeAt(i); Nav.tabs.add(i + 1, t); x -= nw; Y.haptic(6)
-                                    val a2 = slide.getOrPut(nx) { Animatable(0f) }; launch { a2.snapTo(w); a2.animateTo(0f, tween(260, easing = Out)) }
-                                } else if (pv != null && x < -((widths[pv] ?: 0) + gap) / 2f) {
-                                    val pw = (widths[pv] ?: 0) + gap
-                                    Nav.tabs.removeAt(i); Nav.tabs.add(i - 1, t); x += pw; Y.haptic(6)
-                                    val a2 = slide.getOrPut(pv) { Animatable(0f) }; launch { a2.snapTo(-w); a2.animateTo(0f, tween(260, easing = Out)) }
-                                }
-                                dx.snapTo(x)
-                            }
+    val scroll = rememberScrollState()
+    BoxWithConstraints(Modifier.fillMaxWidth().height(stripH)) {
+        val n = Nav.tabs.size.coerceAtLeast(1)
+        val tabW = ((maxWidth - padS * 2 - plusW) / n).coerceIn(104.dp, 232.dp)
+        val wPx = with(d) { tabW.toPx() }
+        val startPx = with(d) { padS.toPx() }
+        fun offOf(t: OpenDoc) = if (dragging === t) dx.value else slide[t]?.value ?: 0f
+        Box(Modifier.fillMaxSize()
+            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+            .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+            .drawBehind {
+                drawRect(band)
+                // 고른 탭 자리만 띠를 지워 아래 유리와 이어지게
+                val cur = Nav.cur ?: return@drawBehind
+                val i = Nav.tabs.indexOf(cur); if (i < 0) return@drawBehind
+                if (dragging === cur && dy.value > 1f) return@drawBehind
+                val x = startPx + i * wPx + offOf(cur) - scroll.value
+                val top = size.height - tabH.toPx(); val h = size.height
+                val rr = 10.dp.toPx(); val r = 8.dp.toPx(); val w = wPx
+                val p = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(x - r, h); quadraticTo(x, h, x, h - r)
+                    lineTo(x, top + rr); quadraticTo(x, top, x + rr, top)
+                    lineTo(x + w - rr, top); quadraticTo(x + w, top, x + w, top + rr)
+                    lineTo(x + w, h - r); quadraticTo(x + w, h, x + w + r, h); close()
+                }
+                drawPath(p, Color.Black, blendMode = androidx.compose.ui.graphics.BlendMode.Clear)
+            }
+        )
+        Row(Modifier.fillMaxSize().horizontalScroll(scroll).padding(start = padS), verticalAlignment = Alignment.Bottom) {
+            Nav.tabs.forEachIndexed { idx, t ->
+                androidx.compose.runtime.key(t) {
+                    val on = Nav.cur === t
+                    val me = dragging === t
+                    val sl = slide.getOrPut(t) { Animatable(0f) }
+                    val nextOn = Nav.tabs.getOrNull(idx + 1)?.let { Nav.cur === it } == true
+                    val lifted = me && dy.value > 1f
+                    Box(Modifier.width(tabW).height(tabH)
+                        .zIndex(if (me) 2f else if (on) 1f else 0f)
+                        .graphicsLayer {
+                            translationX = if (me) dx.value else sl.value
+                            translationY = if (me) dy.value else 0f
+                            alpha = if (me) 1f - (dy.value / (tearPx * 2.2f)).coerceIn(0f, .6f) else 1f
                         }
-                    }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
-                    BasicText(Y.clean(if (on) curTitle else t.doc.title).ifBlank { "제목 없음" }, style = txt(13.sp, if (on) 650 else 500, if (on) T.snow else T.ink2), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        .then(if (lifted) Modifier.shadow(10.dp, RoundedCornerShape(10.dp)).background(glassColor(), RoundedCornerShape(10.dp)) else Modifier)
+                        .pointerInput(t) { detectTapGestures(onTap = { Nav.switchTo(t) }) }
+                        // 옆으로 끌면 자리 바꾸기, 아래로 뜯어내면 닫기
+                        .pointerInput(t) {
+                            detectDragGestures(
+                                onDragStart = { dragging = t; scope.launch { dx.snapTo(0f); dy.snapTo(0f) }; Y.haptic(8) },
+                                onDragEnd = {
+                                    if (dy.value > tearPx) { Y.haptic(12); dragging = null; Nav.closeTab(t); scope.launch { dx.snapTo(0f); dy.snapTo(0f) } }
+                                    else scope.launch {
+                                        launch { dy.animateTo(0f, androidx.compose.animation.core.spring(.7f, 500f)) }
+                                        dx.animateTo(0f, androidx.compose.animation.core.spring(.75f, 500f)); if (dragging === t) dragging = null
+                                    }
+                                },
+                                onDragCancel = { scope.launch { launch { dy.animateTo(0f) }; dx.animateTo(0f); dragging = null } },
+                            ) { ch, a ->
+                                ch.consume()
+                                scope.launch {
+                                    dy.snapTo((dy.value + a.y).let { if (it < 0) it * .2f else it })
+                                    var x = dx.value + a.x
+                                    val i = Nav.tabs.indexOf(t)
+                                    if (x > wPx / 2f && i < Nav.tabs.size - 1) {
+                                        val o = Nav.tabs[i + 1]; Nav.tabs.removeAt(i); Nav.tabs.add(i + 1, t); x -= wPx; Y.haptic(6)
+                                        val a2 = slide.getOrPut(o) { Animatable(0f) }; launch { a2.snapTo(wPx); a2.animateTo(0f, tween(240, easing = Out)) }
+                                    } else if (x < -wPx / 2f && i > 0) {
+                                        val o = Nav.tabs[i - 1]; Nav.tabs.removeAt(i); Nav.tabs.add(i - 1, t); x += wPx; Y.haptic(6)
+                                        val a2 = slide.getOrPut(o) { Animatable(0f) }; launch { a2.snapTo(-wPx); a2.animateTo(0f, tween(240, easing = Out)) }
+                                    }
+                                    dx.snapTo(x)
+                                }
+                            }
+                        }) {
+                        Row(Modifier.fillMaxSize().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            val icon = when (t.doc.type) { "pdf" -> "pdf"; "quiz" -> "quiz"; else -> "notes" }
+                            Ic(icon, size = 15.dp, color = if (on) T.snow else T.ink2)
+                            Spacer(Modifier.width(8.dp))
+                            BasicText(Y.clean(if (on) curTitle else t.doc.title).ifBlank { "제목 없음" }, Modifier.weight(1f),
+                                style = txt(12.5.sp, if (on) 600 else 500, if (on) T.snow else T.ink2), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Box(Modifier.size(26.dp).clip(CircleShape).pointerInput(t) { detectTapGestures { Y.haptic(8); Nav.closeTab(t) } },
+                                contentAlignment = Alignment.Center) { Ic("close", size = 13.dp, color = T.ink2, stroke = 2f) }
+                        }
+                        // 고르지 않은 탭 사이 가는 칸막이
+                        if (!on && !nextOn && !me) Box(Modifier.align(Alignment.CenterEnd).size(1.dp, 16.dp).background(T.hair))
+                    }
                 }
             }
+            Box(Modifier.height(tabH), contentAlignment = Alignment.Center) {
+                IconBtn("plus", "다른 문서 열기", size = 32.dp, iconSize = 17.dp) { Nav.closeEditor() }
+            }
         }
-        IconBtn("plus", "다른 문서 열기", size = 32.dp, iconSize = 16.dp) { Nav.closeEditor() }
     }
 }
 
