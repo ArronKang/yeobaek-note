@@ -152,14 +152,26 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
      */
     private fun snapTo(vy: Float, startSy: Float) {
         if (tops.isEmpty()) return
-        val near = { y: Float -> doc.pages.indices.minBy { abs(snapY(it) - y) } }
-        val from = near(startSy)
-        val i = when {
-            vy > 0.35f * dens -> (from + 1).coerceAtMost(doc.pages.size - 1)
-            vy < -0.35f * dens -> (from - 1).coerceAtLeast(0)
-            else -> near(sy)
+        // 붙을 자리: 쪽 맨 위, 그리고 쪽이 화면보다 길면 쪽 맨 아래(끝이 화면 아래에 맞음)
+        val cand = ArrayList<Float>()
+        doc.pages.indices.forEach { j ->
+            cand.add(snapY(j))
+            val end = tops[j] + pageH(j) - height + dp(16f)
+            if (end > tops[j] - topPad + 1f) cand.add(end.coerceIn(0f, maxSy))
         }
-        val target = snapY(i)
+        cand.sort()
+        val fling = 0.35f * dens
+        val target = when {
+            vy > fling -> cand.firstOrNull { it > sy + 1f } ?: maxSy
+            vy < -fling -> cand.lastOrNull { it < sy - 1f } ?: 0f
+            else -> {
+                // 쪽 안에서 읽는 중(화면에 쪽 경계가 안 보임)이면 그 자리에 둠
+                val top = sy + topPad; val bot = sy + height
+                val i0 = doc.pages.indices.lastOrNull { tops[it] <= top } ?: 0
+                if (tops[i0] + pageH(i0) >= bot - 1f) { afterScroll(); return }
+                cand.minBy { abs(it - sy) }
+            }
+        }
         if (abs(target - sy) < 1f) { sy = target; afterScroll(); return }
         animateScroll(target)
     }

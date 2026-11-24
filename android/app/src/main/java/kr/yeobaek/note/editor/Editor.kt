@@ -340,12 +340,11 @@ private fun Chrome(ed: Ed, open: OpenDoc, statusTop: androidx.compose.ui.unit.Dp
         Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
             IconBtn("back", "라이브러리") { Nav.closeEditor() }
             Spacer(Modifier.width(6.dp))
-            BasicTextField(title, { title = it; doc.title = it; ed.view?.queueSave() }, Modifier.weight(1f),
-                textStyle = txt(15.sp, 600, T.snow).copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center), singleLine = true,
-                cursorBrush = SolidColor(T.acc), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
+            BasicText(Y.clean(title).ifBlank { "제목 없음" }, Modifier.weight(1f),
+                style = txt(15.sp, 600, T.snow).copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.width(6.dp))
             IconBtn("share", "내보내기") { ed.view?.let { v -> v.saveNow(); onExport(doc, v) } }
-            IconBtn("more", "더보기") { r -> moreMenu(ed, r) }
+            IconBtn("more", "더보기") { r -> moreMenu(ed, r) { renameModal(title) { t -> title = t; doc.title = t; ed.view?.queueSave(); ed.view?.saveNow() } } }
         }
         // 2줄: 탭, 도구, 펜
         Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -484,19 +483,40 @@ private fun TabStrip(curTitle: String) {
                 }
             }
             Box(Modifier.height(tabH), contentAlignment = Alignment.Center) {
-                IconBtn("plus", "다른 문서 열기", size = 32.dp, iconSize = 17.dp) { Nav.closeEditor() }
+                IconBtn("plus", "새 노트", size = 32.dp, iconSize = 17.dp) { kr.yeobaek.note.library.newNoteModal() }
             }
         }
     }
 }
 
-private fun moreMenu(ed: Ed, r: Rect) {
+private fun moreMenu(ed: Ed, r: Rect, onRename: () -> Unit) {
     Overlay.popover("more", r, 220.dp, "right") {
+        PItem("이름 바꾸기", "text") { Overlay.closePop(); onRename() }
         PItem("도구 막대 숨기기", "collapse") { Overlay.closePop(); ed.collapsed = true }
         PItem("다크 모드", "moon", on = Y.isDark()) { Overlay.closePop(); toggleDark(ed) }
         PItem("설정", "settings") { Overlay.closePop(); kr.yeobaek.note.settings.openSettings() }
     }
 }
+/** 문서 이름 바꾸기 창 */
+private fun renameModal(cur: String, done: (String) -> Unit) {
+    Overlay.modal(width = 420.dp) { close ->
+        var v by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(cur, androidx.compose.ui.text.TextRange(0, cur.length))) }
+        val fr = remember { androidx.compose.ui.focus.FocusRequester() }
+        fun go() { val t = v.text.trim(); if (t.isNotEmpty()) done(t); close() }
+        Column {
+            BasicTextField(v, { if (it.text.length <= 40) v = it }, Modifier.fillMaxWidth().focusRequester(fr).padding(vertical = 6.dp), singleLine = true,
+                textStyle = txt(22.sp, 600, T.snow, -.02f), cursorBrush = SolidColor(T.acc),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { go() }))
+            Box(Modifier.fillMaxWidth().height(.5.dp).background(T.hair))
+            Spacer(Modifier.height(24.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Btn("취소", "ghost") { close() }; Spacer(Modifier.width(4.dp)); Btn("바꾸기") { go() }
+            }
+        }
+        LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }
+    }
+}
+
 private fun toggleDark(ed: Ed) { Y.settings.dark = if (Y.isDark()) "off" else "on"; Y.saveSettings(); QuizLayout.clearCache(); ed.left?.themeChanged(); ed.right?.themeChanged(); Y.haptic(8) }
 
 @Composable private fun Sep() = Box(Modifier.padding(horizontal = 4.dp).size(.5.dp, 22.dp).background(T.hair))
