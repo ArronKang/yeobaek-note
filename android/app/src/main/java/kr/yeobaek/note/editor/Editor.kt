@@ -333,10 +333,10 @@ private fun Chrome(ed: Ed, open: OpenDoc, statusTop: androidx.compose.ui.unit.Dp
         .padding(horizontal = 6.dp, vertical = 4.dp)) {
         // 1줄: 뒤로, 문서 탭, 제목, 공유, ⋯
         Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconBtn("back", "라이브러리") { Nav.closeEditor() }
-            DocTabs()
-            Spacer(Modifier.width(6.dp))
             var title by remember(open, doc) { mutableStateOf(doc.title) }
+            IconBtn("back", "라이브러리") { Nav.closeEditor() }
+            DocTabs(title)
+            Spacer(Modifier.width(6.dp))
             BasicTextField(title, { title = it; doc.title = it; ed.view?.queueSave() }, Modifier.weight(1f),
                 textStyle = txt(15.sp, 600, T.snow).copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center), singleLine = true,
                 cursorBrush = SolidColor(T.acc), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
@@ -375,7 +375,7 @@ private fun Chrome(ed: Ed, open: OpenDoc, statusTop: androidx.compose.ui.unit.Dp
 }
 
 @Composable
-private fun DocTabs() {
+private fun DocTabs(curTitle: String) {
     if (Nav.tabs.isEmpty()) return
     val d = LocalDensity.current
     val gap = with(d) { 4.dp.toPx() }
@@ -448,7 +448,7 @@ private fun DocTabs() {
                             }
                         }
                     }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
-                    BasicText(Y.clean(t.doc.title).ifBlank { "제목 없음" }, style = txt(13.sp, if (on) 650 else 500, if (on) T.snow else T.ink2), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    BasicText(Y.clean(if (on) curTitle else t.doc.title).ifBlank { "제목 없음" }, style = txt(13.sp, if (on) 650 else 500, if (on) T.snow else T.ink2), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
