@@ -68,9 +68,48 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     var rootX = 0f; var rootY = 0f
     /** 저지연 필기 층 (DocFrame이 붙여 줌) */
     var front: FrontInk? = null
-    /** 자를 화면에 꺼냄 */
+    /** 자를 화면에 꺼냄: 한 손가락으로 옮기고 두 손가락으로 돌림, 펜을 자 가장자리 가까이 대면 곧은 선 */
     var rulerOn = false
-    fun setRuler(on: Boolean) { rulerOn = on; invalidate() }
+    private var rX = -1f; private var rY = 0f; private var rA = 0f
+    private val rTouch = HashMap<Int, FloatArray>()
+    fun setRuler(on: Boolean) { rulerOn = on; if (on && rX < 0) { rX = width / 2f; rY = height * .45f; rA = 0f }; rTouch.clear(); invalidate() }
+    private fun rLen() = max(width, height) * 1.4f
+    private fun rW() = dp(76f)
+    /** 화면 점을 자 좌표로: (길이 방향, 폭 방향) */
+    private fun toRuler(x: Float, y: Float): FloatArray { val dx = x - rX; val dy = y - rY; val c = kotlin.math.cos(rA); val sn = kotlin.math.sin(rA); return floatArrayOf(dx * c + dy * sn, -dx * sn + dy * c) }
+    private fun inRuler(x: Float, y: Float): Boolean { if (!rulerOn) return false; val r = toRuler(x, y); return abs(r[0]) < rLen() / 2 && abs(r[1]) < rW() / 2 }
+    /** 펜이 자 가장자리 가까이면 그 가장자리(+1 아래, -1 위) */
+    private fun rulerEdgeAt(x: Float, y: Float): Int { if (!rulerOn) return 0; val r = toRuler(x, y); if (abs(r[0]) > rLen() / 2) return 0; val e = rW() / 2; return when { abs(r[1] - e) < dp(26f) -> 1; abs(r[1] + e) < dp(26f) -> -1; else -> 0 } }
+    private fun onEdge(x: Float, y: Float, edge: Int): FloatArray { val r = toRuler(x, y); val v = edge * (rW() / 2 + dp(1.5f)); val c = kotlin.math.cos(rA); val sn = kotlin.math.sin(rA); return floatArrayOf(rX + r[0] * c - v * sn, rY + r[0] * sn + v * c) }
+    private val rPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private fun drawRuler(cv: Canvas) {
+        if (!rulerOn) return
+        val dk = Paper.c().dark
+        cv.save(); cv.translate(rX, rY); cv.rotate(Math.toDegrees(rA.toDouble()).toFloat())
+        val L = rLen(); val w = rW()
+        rPaint.reset(); rPaint.isAntiAlias = true
+        rPaint.color = if (dk) 0xE63A3A3C.toInt() else 0xE6F3F3F3.toInt(); rPaint.setShadowLayer(dp(10f), 0f, dp(3f), 0x33000000)
+        cv.drawRoundRect(-L / 2, -w / 2, L / 2, w / 2, dp(6f), dp(6f), rPaint); rPaint.clearShadowLayer()
+        rPaint.color = if (dk) 0x33FFFFFF else 0x1F000000; rPaint.style = Paint.Style.STROKE; rPaint.strokeWidth = dp(.6f)
+        cv.drawRoundRect(-L / 2, -w / 2, L / 2, w / 2, dp(6f), dp(6f), rPaint)
+        // 눈금: 1mm(약 1/210 쪽 폭)마다, 5·10마다 길게 (위·아래 가장자리 모두)
+        val mm = W / YY.MM; var i = 0; val n = (L / 2 / mm).toInt()
+        rPaint.style = Paint.Style.STROKE
+        for (k in -n..n) {
+            val x = k * mm
+            val long = k % 10 == 0; val mid = k % 5 == 0
+            val h = if (long) dp(14f) else if (mid) dp(10f) else dp(6f)
+            rPaint.color = if (dk) (if (long) 0xFFEBEBF5.toInt() else 0x99EBEBF5.toInt()) else (if (long) 0xFF3A3A3C.toInt() else 0xFF8E8E93.toInt()); rPaint.strokeWidth = if (long) dp(1.1f) else dp(.8f)
+            cv.drawLine(x, -w / 2, x, -w / 2 + h, rPaint); cv.drawLine(x, w / 2, x, w / 2 - h, rPaint)
+            i++
+        }
+        // 가운데 각도
+        rPaint.style = Paint.Style.FILL; rPaint.color = if (dk) 0xFFEBEBF5.toInt() else 0xFF1C1C1E.toInt(); rPaint.textAlign = Paint.Align.CENTER; rPaint.textSize = dp(15f)
+        rPaint.typeface = kr.yeobaek.note.ui.AppleFont.sym(600)
+        val deg = ((Math.toDegrees(rA.toDouble()).roundToInt() % 360) + 360) % 360
+        cv.drawText("${if (deg > 180) 360 - deg else deg}°", 0f, dp(5f), rPaint)
+        cv.restore()
+    }
     private fun frontOn() = front?.ok == true
     /** 펜을 뗀 뒤: 아래 화면이 같은 획을 그릴 때까지 몇 프레임 기다렸다가 지움 */
     private fun clearFrontLater() { front?.clearSoon() }
@@ -339,6 +378,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private var lastView = FloatArray(0)
+
+    override fun dispatchDraw(cv: Canvas) { super.dispatchDraw(cv); drawRuler(cv) }
 
     override fun onDraw(cv: Canvas) {
         val c = Paper.c()
@@ -800,6 +841,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         var snapped = false; var snapOld: MutableList<FloatArray>? = null
         var pred: Stroke? = null
         var liveBaked = false; var baked = 0
+        var rEdge = 0
         var erased = false
         var jumps = 0
         var frontTo = 0
@@ -872,6 +914,9 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             // 펜보다 먼저 닿은 손바닥이 그린 획은 지움
             cur?.takeIf { it.touch }?.let { c0 -> cur = null; c0.st?.let { doc.pages[c0.pi].strokes.remove(it) }; dirty(c0.pi) }
         }
+        if (tool == "touch" && (inRuler(x, y) || rTouch.isNotEmpty()) && !isPalm(ev, i)) {
+            rTouch[id] = floatArrayOf(x, y); haltFingers(); return
+        }
         if (tool == "touch") {
             if (penRecent() || isPalm(ev, i)) return
             touches[id] = floatArrayOf(x, y)
@@ -926,7 +971,10 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             invalidate(); return
         }
         val pen = YY.curPen()
-        val st = Stroke(pen.kind, pen.color, pen.mm / YY.MM, pen.alpha.coerceIn(0.05f, 1f), if (pen.kind == "pen" && pen.type != null && pen.type != "ball") pen.type else null, mutableListOf(pt))
+        // 자 가장자리 가까이에서 시작한 획은 가장자리를 따라 곧게
+        c.rEdge = rulerEdgeAt(x, y)
+        val pt0 = if (c.rEdge != 0) onEdge(x, y, c.rEdge).let { e -> norm(pi, e[0], e[1], pr) } else pt
+        val st = Stroke(pen.kind, pen.color, pen.mm / YY.MM, pen.alpha.coerceIn(0.05f, 1f), if (pen.kind == "pen" && pen.type != null && pen.type != "ball") pen.type else null, mutableListOf(pt0))
         if (pen.kind == "pen") st.live = true
         c.st = st
         if (tool == "pen") { predictor = predictor ?: runCatching { MotionEventPredictor.newInstance(this) }.getOrNull(); predictor?.record(ev) }
@@ -936,12 +984,33 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         invalidate()
     }
 
+    /** 자 옮기기·돌리기: 한 손가락 = 옮김, 두 손가락 = 돌리며 옮김 (0·45·90°에 살짝 붙음) */
+    private fun moveRuler(ev: MotionEvent) {
+        val ids = rTouch.keys.toList()
+        val now = ids.mapNotNull { id -> val k = ev.findPointerIndex(id); if (k < 0) null else id to floatArrayOf(ev.getX(k), ev.getY(k)) }.toMap()
+        if (ids.size == 1) { val a = rTouch[ids[0]]!!; val b = now[ids[0]] ?: return; rX += b[0] - a[0]; rY += b[1] - a[1] }
+        else if (ids.size >= 2) {
+            val a0 = rTouch[ids[0]]!!; val a1 = rTouch[ids[1]]!!; val b0 = now[ids[0]] ?: return; val b1 = now[ids[1]] ?: return
+            val angA = kotlin.math.atan2(a1[1] - a0[1], a1[0] - a0[0]); val angB = kotlin.math.atan2(b1[1] - b0[1], b1[0] - b0[0])
+            rA += angB - angA
+            rX += (b0[0] + b1[0]) / 2 - (a0[0] + a1[0]) / 2; rY += (b0[1] + b1[1]) / 2 - (a0[1] + a1[1]) / 2
+        }
+        now.forEach { (id, p) -> rTouch[id] = p }
+        invalidate()
+    }
+    private fun snapRuler() {
+        val deg = Math.toDegrees(rA.toDouble())
+        val near = (deg / 45.0).roundToInt() * 45.0
+        if (abs(deg - near) < 3) { rA = Math.toRadians(near).toFloat(); YY.haptic(8) }
+    }
+
     private fun moveAll(ev: MotionEvent) {
         for (i in 0 until ev.pointerCount) {
             val id = ev.getPointerId(i); val x = ev.getX(i); val y = ev.getY(i)
             if (toolOf(ev, i) == "pen") lastPen = SystemClock.uptimeMillis()
             if (lpId == id && hypot(x - lpX, y - lpY) > dp(9f)) cancelLP()
             if (cardDragId == id) { host.cardDrag(x, y); continue }
+            if (rTouch.containsKey(id)) { moveRuler(ev); break }
             if (touches.containsKey(id)) { touches[id] = floatArrayOf(x, y); if (pinch != null) { movePinch(); continue } }
             val S = scrolling
             if (S != null && S.id == id) {
@@ -990,7 +1059,9 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         if (lpId == c.id && c.far > dp(3f) && ev.getToolType(i) == MotionEvent.TOOL_TYPE_STYLUS) cancelLP()
         if (c.snapped) return
         val isPen = ev.getToolType(i) == MotionEvent.TOOL_TYPE_STYLUS
-        fun addPt(px: Float, py: Float, pr: Float) {
+        fun addPt(px0: Float, py0: Float, pr: Float) {
+            val e = if (c.rEdge != 0) onEdge(px0, py0, c.rEdge) else null
+            val px = e?.get(0) ?: px0; val py = e?.get(1) ?: py0
             val pt = norm(c.pi, px, py, Ink.pressure(isPen, pr)); val last = st.p.last()
             // 압력 흔들림 완화 (지수 평활)
             pt[2] = ((last[2] * 0.6f + pt[2] * 0.4f) * 100).roundToInt() / 100f
@@ -1059,6 +1130,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         if (tool == "pen") { penDown = false; lastPen = SystemClock.uptimeMillis() }
         if (lpId == id) cancelLP()
         if (cardDragId == id) { cardDragId = -1; host.cardUp(x, y, tool == "pen"); return }
+        if (rTouch.containsKey(id)) { rTouch.remove(id); if (rTouch.isEmpty()) { snapRuler(); invalidate() }; return }
         if (touches.containsKey(id)) {
             touches.remove(id)
             val pc = pinch
