@@ -93,7 +93,7 @@ fun Ic(name: String, modifier: Modifier = Modifier, size: Dp = 24.dp, color: Col
 
 /* =============== 겹쳐 뜨는 것들: 메뉴(팝오버), 창, 토스트, 이름표 =============== */
 class PopSpec(val key: Any, val anchor: Rect, val width: Dp?, val align: String, val owner: String?, val onClose: (() -> Unit)?, val content: @Composable ColumnScope.() -> Unit)
-class ModalSpec(val id: Int, val page: Boolean, val width: Dp, val dismissable: Boolean, val onClose: (() -> Unit)?, val content: @Composable (close: () -> Unit) -> Unit)
+class ModalSpec(val id: Int, val page: Boolean, val width: Dp, val dismissable: Boolean, val onClose: (() -> Unit)?, val content: @Composable (close: () -> Unit) -> Unit, val bare: Boolean = false)
 class ToastSpec(val id: Long, val msg: String, val action: String?, val onAction: (() -> Unit)?, val ms: Long)
 class TipSpec(val id: Long, val text: String, val anchor: Rect)
 
@@ -112,9 +112,9 @@ object Overlay {
     }
     fun closePop(): Boolean { val p = pop ?: return false; pop = null; p.onClose?.invoke(); return true }
 
-    fun modal(page: Boolean = false, width: Dp = 460.dp, dismissable: Boolean = true, onClose: (() -> Unit)? = null, content: @Composable (close: () -> Unit) -> Unit): () -> Unit {
+    fun modal(page: Boolean = false, width: Dp = 460.dp, dismissable: Boolean = true, onClose: (() -> Unit)? = null, bare: Boolean = false, content: @Composable (close: () -> Unit) -> Unit): () -> Unit {
         closePop()
-        val m = ModalSpec(++mid, page, width, dismissable, onClose, content); modals.add(m)
+        val m = ModalSpec(++mid, page, width, dismissable, onClose, content, bare); modals.add(m)
         return { closeModal(m) }
     }
     fun closeModal(m: ModalSpec) { if (modals.remove(m)) m.onClose?.invoke() }
@@ -219,8 +219,8 @@ private fun ModalBox(m: ModalSpec) {
         Box(Modifier.padding(16.dp).widthIn(max = m.width).fillMaxWidth()
             .graphicsLayer { translationY = (1 - a.value) * 14.dp.toPx(); alpha = (a.value * 3).coerceAtMost(1f) }
             .shadow(30.dp, RoundedCornerShape(34.dp), ambientColor = Color(0x2E000000), spotColor = Color(0x2E000000))
-            .background(T.raise, RoundedCornerShape(34.dp)).pointerInput(Unit) { detectTapGestures { } }
-            .padding(if (m.width <= 380.dp) 24.dp else 28.dp)) { m.content(close) }
+            .background(if (m.bare) (if (T.dark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)) else T.raise, RoundedCornerShape(34.dp)).pointerInput(Unit) { detectTapGestures { } }
+            .padding(if (m.bare) 0.dp else if (m.width <= 380.dp) 24.dp else 28.dp)) { m.content(close) }
     }
 }
 

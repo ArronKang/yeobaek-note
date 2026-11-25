@@ -671,7 +671,7 @@ fun pickerMore(r: Rect, ed: Ed) {
             }
         }
         Line("필압 민감도") { MiniSeg(Y.settings.pressure, listOf("low" to "낮음", "mid" to "보통", "high" to "높음")) { Y.settings.pressure = it; Y.saveSettings() } }
-        Line("손바닥 무시 감도") { MiniSeg(Y.settings.palm, listOf("low" to "약", "mid" to "중", "high" to "강")) { Y.settings.palm = it; Y.saveSettings() } }
+        Line("손바닥 무시 감도") { MiniSeg(Y.settings.palm, listOf("weak" to "약", "mid" to "중", "strong" to "강")) { Y.settings.palm = it; Y.saveSettings() } }
         Line("필기 보정") { Switch(Y.settings.snap) { Y.settings.snap = it; Y.saveSettings() } }
         Line("손가락으로 쓰기") { Switch(Y.settings.finger) { Y.settings.finger = it; Y.saveSettings() } }
         if (Y.settings.dock != "top") { Sep(); kr.yeobaek.note.ui.PItem("도구 막대를 위에 붙이기", "up") { Y.settings.dock = "top"; Y.saveSettings(); Overlay.closePop(); ed.rev++ } }
