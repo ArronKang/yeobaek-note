@@ -135,7 +135,7 @@ object Nav {
                 if (!f.exists()) { Overlay.toast("열 수 없어요"); return }
                 busy = true
                 scope.launch {
-                    val doc = withContext(Dispatchers.IO) { pdfDoc(f, n.key ?: n.id, n.title) }
+                    val doc = withContext(Dispatchers.IO) { pdfDoc(f, n.key ?: n.id, n.title, if (n.ov) n.id else null) }
                     busy = false
                     if (doc == null) { Overlay.toast("열 수 없어요"); return@launch }
                     doc.libId = n.id; enter(doc)
@@ -163,7 +163,7 @@ object Nav {
             val d = withContext(Dispatchers.IO) {
                 runCatching {
                     when (n.kind) {
-                        "pdf" -> pdfDoc(Store.file("blobs/${n.id}.pdf"), n.key ?: n.id, n.title)?.also { it.libId = n.id }
+                        "pdf" -> pdfDoc(Store.file("blobs/${n.id}.pdf"), n.key ?: n.id, n.title, if (n.ov) n.id else null)?.also { it.libId = n.id }
                         "quiz" -> { Quiz.prep(n); Quiz.quizDoc(n) }
                         else -> Docs.noteDoc(n)
                     }
@@ -173,12 +173,15 @@ object Nav {
         }
     }
 
-    private fun pdfDoc(f: File, key: String, title: String): Doc? {
+    private fun pdfDoc(f: File, key: String, title: String, ovId: String? = null): Doc? {
         val src = PdfSource.open(f) ?: return null
         val ink = Store.get("p/${Y.keyFile(key)}.json", PdfInk.serializer())
         val pages = (0 until src.count).map { i ->
             Page(src.ratios[i], "blank", ink?.pages?.getOrNull(i)?.strokes ?: ArrayList(), ink?.pages?.getOrNull(i)?.texts ?: ArrayList())
         }.toMutableList()
+        // 원본 PDF 문제지: 답안 정보 층 + 채점 상태 (같은 id로)
+        val ov = ovId?.let { Store.getRaw("q/$it.json")?.let { t -> kr.yeobaek.note.quiz.QOv.parse(t) } }
+        if (ov != null) return Doc(key, "pdf", title, pages, quiz = kr.yeobaek.note.quiz.QOv.spec(ov), qs = Store.get("qs/$ovId.json", kr.yeobaek.note.data.QuizState.serializer()) ?: kr.yeobaek.note.data.QuizState(), pdf = src, key = key, ov = ov)
         return Doc(key, "pdf", title, pages, pdf = src, key = key)
     }
 
@@ -208,7 +211,7 @@ object Nav {
         scope.launch {
             val r = withContext(Dispatchers.IO) { runCatching { importNow(uri, folder) } }
             busy = false
-            val m = r.getOrNull()
+            val m = r.getOrNull(); r.exceptionOrNull()?.let { android.util.Log.e("YB", "import", it) }
             if (m == null) Overlay.toast("열 수 없는 파일이에요")
             after(m)
         }
@@ -224,10 +227,34 @@ object Nav {
         return name
     }
 
+    fun importYbq2(bytes: ByteArray, name: String, folder: String?): NoteMeta? {
+        var pdf: ByteArray? = null; var quiz: String? = null
+        java.util.zip.ZipInputStream(bytes.inputStream()).use { z ->
+            while (true) {
+                val e = z.nextEntry ?: break
+                when { e.name.endsWith(".pdf", true) -> pdf = z.readBytes(); e.name.endsWith(".json", true) -> quiz = z.readBytes().toString(Charsets.UTF_8) }
+            }
+        }
+        val pb = pdf ?: return null; val qt = quiz ?: return null
+        val ov = kr.yeobaek.note.quiz.QOv.parse(qt) ?: return null
+        val id = Y.uid()
+        val f = Store.file("blobs/$id.pdf"); f.writeBytes(pb)
+        val src = PdfSource.open(f) ?: run { f.delete(); return null }
+        val thumb = "$id.jpg"; val ok = PdfSource.cover(src, Store.file("thumbs/$thumb")); val count = src.count; src.close()
+        Store.setRaw("q/$id.json", qt)
+        val now = System.currentTimeMillis()
+        val title = ov.title.ifBlank { name.substringBeforeLast('.') }
+        val m = NoteMeta(id, title, "slate", "pdf", folder = folder, created = now, updated = now, pageCount = count, key = id, thumb = if (ok) thumb else null, ov = true)
+        Y.lib.notes.add(0, m); Y.saveLib()
+        return m
+    }
+
     private fun importNow(uri: Uri, folder: String?): NoteMeta? {
         val bytes = Y.app.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
         val name = nameOf(uri)
         val head = String(bytes, 0, minOf(bytes.size, 64), Charsets.UTF_8).trimStart('﻿', ' ', '\n', '\r', '\t')
+        // .ybq 2: zip(original.pdf + quiz.json) = 원본 PDF 그대로 + 답안 정보 층
+        if (bytes.size > 4 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()) return importYbq2(bytes, name, folder)
         if (name.endsWith(".ybq", true) || head.startsWith("{")) {
             val text = String(bytes, Charsets.UTF_8).trimStart('﻿')
             val spec = Docs.parseQuiz(text)

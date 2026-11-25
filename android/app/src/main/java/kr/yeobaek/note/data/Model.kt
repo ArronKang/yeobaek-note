@@ -96,6 +96,7 @@ class NoteMeta(
     var score: String? = null,
     var key: String? = null,        // PDF: 필기 키
     var thumb: String? = null,      // PDF: 표지 그림 파일 이름
+    var ov: Boolean = false,        // PDF 위 답안 정보 층이 있는 문제지 (.ybq 2)
 )
 
 @Serializable

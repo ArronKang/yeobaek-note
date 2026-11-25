@@ -399,10 +399,12 @@ private fun FileBar(ed: Ed, doc: Doc, modifier: Modifier) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         @Composable fun A(icon: String, label: String, on: Boolean = false, color: Color? = null, act: (Rect) -> Unit) = FileAct(icon, label, on, color, act)
         A("sidebar", "페이지", ed.sidebar) { ed.sidebar = !ed.sidebar }
-        when (doc.type) {
+        when (if (doc.quiz != null) "quiz" else doc.type) {
             "quiz" -> {
                 val qs = doc.qs!!
                 A("check", "전체 채점") {
+                    // 원본 PDF 문제지: 보기 위 필기를 먼저 읽어 고른 보기로
+                    doc.ov?.let { ov -> ov.problems.forEachIndexed { i, p -> if (p.type == "choice") { val got = kr.yeobaek.note.quiz.QOv.readSel(p, doc.pages.getOrNull(p.page)?.strokes ?: emptyList(), doc.pages.getOrNull(p.page)?.ratio ?: 1.414f); if (got.size == 1) qs.sel["$i"] = got[0] } } }
                     val (n, sc) = Quiz.gradeAll(doc)
                     v.quizRepaint(); v.animateScore()
                     doc.quiz!!.problems.indices.forEach { if (qs.grade["$it"] != null) v.animate(it, listOf("mark")) }
@@ -413,7 +415,7 @@ private fun FileBar(ed: Ed, doc: Doc, modifier: Modifier) {
                 A("eye", "답 보기", qs.show) { qs.show = !qs.show; Quiz.saveState(doc); v.quizRepaint(); ed.rev++ }
                 A("book", "해설") { r -> solutionsPop(r, doc, v) }
                 A("answer", "정답표") { r -> answerSheet(r, doc, v) }
-                A("retry", "오답만 추출") {
+                if (doc.ov == null) A("retry", "오답만 추출") {
                     Nav.busy = true
                     Nav.scope.launch {
                         val meta = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { Quiz.retry(doc) }

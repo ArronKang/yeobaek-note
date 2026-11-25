@@ -25,6 +25,8 @@ class Doc(
     val pdf: PdfSource? = null,
     val key: String? = null,
     var libId: String? = null,
+    /** 원본 PDF 문제지(.ybq 2)의 답안 정보 층 */
+    val ov: kr.yeobaek.note.quiz.QOverlay? = null,
 ) {
     val bookmarks = HashSet<Int>()
     /** 실행취소 기록 (DocView.Entry) */

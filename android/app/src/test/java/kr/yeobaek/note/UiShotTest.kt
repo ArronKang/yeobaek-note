@@ -37,5 +37,17 @@ class UiShotTest {
         Nav.open(m)
         idle(1500)
         cap(a, "editor")
+        // 원본 PDF 문제지(.ybq 2): 있으면 가져와서 열고, 답 보기 상태도
+        val f = File(System.getenv("YB_YBQ2") ?: "")
+        if (f.isFile) {
+            val m2 = Nav.importYbq2(f.readBytes(), f.name, null) ?: return
+            Nav.open(m2); idle(2500)
+            cap(a, "ybq2")
+            Nav.cur?.doc?.let { d -> d.qs!!.sel["0"] = 1; d.qs!!.grade["0"] = "o"; d.qs!!.grade["1"] = "x"; d.qs!!.show = true; d.qs!!.rev["0"] = mapOf("ans" to 1) }
+            Nav.cur?.let { Nav.switchTo(it) }
+            kr.yeobaek.note.Y.setRev++
+            idle(1500)
+            cap(a, "ybq2-graded")
+        }
     }
 }

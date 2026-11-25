@@ -349,6 +349,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         val dark = c.dark && !(doc.type == "pdf")
         for (st in pg.strokes) if (exclude == null || st !in exclude) Ink.draw(cv, st, K, dark)
         for (t in pg.texts) if (t !== editing) drawText(cv, t, K, c)
+        // 원본 PDF 문제지(.ybq 2): 고른 보기, 정답, 채점 표시
+        doc.ov?.let { kr.yeobaek.note.quiz.QOv.draw(cv, doc, it, i, K, H, c) }
     }
 
     private val DIM = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix().apply { setScale(.88f, .88f, .88f, 1f) })
@@ -1140,7 +1142,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         if (S != null && S.id == id) {
             scrolling = null
             val now = SystemClock.uptimeMillis()
-            if (!cancel && now - S.ts < 350 && hypot(x - S.x0, y - S.y0) < dp(10f) && doc.type == "quiz") {
+            if (!cancel && now - S.ts < 350 && hypot(x - S.x0, y - S.y0) < dp(10f) && (doc.type == "quiz" || doc.ov != null)) {
                 val pi = hitPage(x, y); if (pi >= 0 && quizTap(pi, x, y)) return
             }
             if (pullRaw != 0f) { pullRelease(); snapTo(0f, S.t0); return }
@@ -1190,7 +1192,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             }
             c.st != null -> {
                 val st = c.st!!
-                if (!cancel && doc.type == "quiz" && SystemClock.uptimeMillis() - c.t0 < 350 && c.far < dp(8f) && hypot(x - c.x0, y - c.y0) < dp(8f) && quizTap(c.pi, c.x0, c.y0)) {
+                if (!cancel && (doc.type == "quiz" || doc.ov != null) && SystemClock.uptimeMillis() - c.t0 < 350 && c.far < dp(8f) && hypot(x - c.x0, y - c.y0) < dp(8f) && quizTap(c.pi, c.x0, c.y0)) {
                     // 보기 위를 톡: 점은 지우고 고르기로
                     dirty(c.pi)
                 } else if (cancel && st.p.size < 3) { dirtyStrokes(c.pi, listOf(st)) }
@@ -1280,7 +1282,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
 
     /* ---------- 꾹 누르기 (문제지: 정답 보기) ---------- */
     private fun startLP(id: Int, x: Float, y: Float) {
-        if (doc.type != "quiz") return
+        if (doc.type != "quiz" && doc.ov == null) return
         main.removeCallbacks(lpRun); lpId = id; lpX = x; lpY = y
         main.postDelayed(lpRun, 450)
     }
@@ -1288,19 +1290,35 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     private fun fireLongPress() {
         val id = lpId; lpId = -1; if (id < 0) return
         val pi = hitPage(lpX, lpY); if (pi < 0) return
-        val u = (lpX - pageLeft()) / W * QuizLayout.PW; val v = (lpY - pageTop(pi)) / W * QuizLayout.PW
-        val hit = QuizLayout.pressHit(doc, pi, u, v) ?: return
+        val ov = doc.ov
+        val idx: Int
+        if (ov != null) {
+            // 번호 칸을 꾹: 보기 위 필기를 읽어 하나면 고르고, 정답 카드
+            idx = kr.yeobaek.note.quiz.QOv.pressHit(ov, pi, (lpX - pageLeft()) / W, (lpY - pageTop(pi)) / pageH(pi)) ?: return
+            val p = ov.problems[idx]
+            if (p.type == "choice") {
+                val got = kr.yeobaek.note.quiz.QOv.readSel(p, doc.pages[pi].strokes.filter { it !== cur?.st }, doc.pages[pi].ratio)
+                if (got.size == 1) doc.qs!!.sel["$idx"] = got[0]
+            }
+        } else {
+            val u = (lpX - pageLeft()) / W * QuizLayout.PW; val v = (lpY - pageTop(pi)) / W * QuizLayout.PW
+            idx = (QuizLayout.pressHit(doc, pi, u, v) ?: return).idx
+        }
         YY.haptic(15)
         // 누르는 동안 찍힌 점·스크롤은 없던 일로
         cur?.takeIf { it.id == id }?.let { c -> cur = null; if (c.liveBaked) dirty(c.pi); clearFrontLater() }
         if (scrolling?.id == id) scrolling = null
         cardDragId = id
-        host.quizCard(pi, hit.idx, lpX, lpY, true)
+        host.quizCard(pi, idx, lpX, lpY, true)
         invalidate()
     }
 
     /** 톡: 보기 고르기, 번호 별표 */
     private fun quizTap(pi: Int, x: Float, y: Float): Boolean {
+        doc.ov?.let { ov ->
+            val (idx, n) = kr.yeobaek.note.quiz.QOv.tapHit(ov, pi, (x - pageLeft()) / W, (y - pageTop(pi)) / pageH(pi)) ?: return false
+            Quiz.select(doc, idx, n); dirty(pi); host.quizChanged(); return true
+        }
         val u = (x - pageLeft()) / W * QuizLayout.PW; val v = (y - pageTop(pi)) / W * QuizLayout.PW
         val hit = QuizLayout.tapHit(doc, pi, u, v) ?: return false
         if (hit.kind == "no") Quiz.toggleStar(doc, hit.idx)
