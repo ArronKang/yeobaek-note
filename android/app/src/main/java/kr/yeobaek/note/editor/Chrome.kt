@@ -152,8 +152,11 @@ fun Chrome(ed: Ed, open: OpenDoc, statusTop: Dp, onExport: (Doc, DocView) -> Uni
             ModeSwitch(ed)
             Spacer(Modifier.width(10.dp))
             if (ed.tab == "draw") {
-                if (Y.settings.dock == "top" && ed.pkFloat == null) AttachedPicker(ed, Modifier.weight(1f))
-                else DockSlot(Modifier.weight(1f))
+                // 끄는 동안에도 원래 막대는 (안 보이게) 남겨 둬야 손가락 끌기가 끊기지 않음
+                if (Y.settings.dock == "top") Box(Modifier.weight(1f)) {
+                    if (ed.pkFloat != null) DockSlot(Modifier.matchParentSize())
+                    AttachedPicker(ed, Modifier.fillMaxWidth().graphicsLayer { alpha = if (ed.pkFloat != null) 0f else 1f })
+                } else DockSlot(Modifier.weight(1f))
             } else FileBar(ed, doc, Modifier.weight(1f))
         }
         // 올가미로 고른 것: 복사, 색, 삭제
@@ -214,7 +217,7 @@ private fun AttachedPicker(ed: Ed, modifier: Modifier) {
     val breakPx = with(d) { 54.dp.toPx() }
     val dragger = remember(ed) {
         object : PickerDrag {
-            override fun start() { PkDrag.start = bounds.topLeft; PkDrag.off = Offset.Zero; PkDrag.detached = false; PkDrag.size = bounds.size }
+            override fun start() { PkDrag.start = bounds.topLeft; PkDrag.off = Offset.Zero; PkDrag.detached = false; PkDrag.size = Size(min(ed.screen.width - with(d) { 40.dp.toPx() }, with(d) { 680.dp.toPx() }), bounds.height) }
             override fun drag(dl: Offset) {
                 PkDrag.off += dl
                 if (!PkDrag.detached) {
@@ -247,9 +250,9 @@ private fun dropPicker(ed: Ed, d: androidx.compose.ui.unit.Density) {
     val chromeBottom = PkDrag.start.y + hgt
     val s = Y.settings
     s.dock = when {
-        top < chromeBottom - hgt * .2f && abs(cx - (PkDrag.start.x + w / 2)) < scr.width * .4f -> "top"
-        cx < m * 1.6f || p.x < m * .4f -> "left"
-        cx > scr.width - m * 1.6f || p.x + w > scr.width - m * .4f -> "right"
+        top < chromeBottom - hgt * .2f -> "top"
+        p.x < m * .2f - w * .12f -> "left"                       // 막대를 왼쪽 가장자리 밖으로 조금 밀면
+        p.x + w > scr.width - m * .2f + w * .12f -> "right"      // 오른쪽 가장자리 밖으로 조금 밀면
         bottom > scr.height - m -> "bottom"
         else -> "float"
     }
