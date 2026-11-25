@@ -538,7 +538,9 @@ private fun QuizCard(ed: Ed, doc: Doc, c: Card, close: () -> Unit) {
     val k = v.W / QuizLayout.PW                                     // 페이지 1단위 = 픽셀
     val p = doc.quiz!!.problems[c.idx]
     val base = (11f * k / d.density / d.fontScale).coerceIn(14f, 19f)
-    val left = v.rootX + v.pageLeft() + 76f * k; val right = v.rootX + v.pageLeft() + v.W - 44f * k
+    val pl = v.rootX + v.pageLeft() + 12f * k; val pr = v.rootX + v.pageLeft() + v.W - 12f * k
+    val cw = min(pr - pl, with(d) { 380.dp.toPx() })
+    val left = (c.x - cw * .3f).coerceIn(pl, pr - cw); val right = left + cw
     val pageTop = v.rootY + v.pageTop(c.pi); val pageBottom = pageTop + v.pageH(c.pi)
     var hpx by remember(c) { mutableFloatStateOf(0f) }
     val below = c.y + 22f * k
@@ -564,31 +566,34 @@ private fun QuizCard(ed: Ed, doc: Doc, c: Card, close: () -> Unit) {
         .padding(horizontal = (base * 1.15f).dp, vertical = (base * 1f).dp)) {
         @Composable fun Acts() {
             // 맞았어요 · 애매 · 틀렸어요: 눌러서, 또는 꾹 누른 채 그 버튼 위로 / 왼쪽·아래·오른쪽으로 조금 밀고 떼서
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(Triple("o", "check", "맞았어요"), Triple("?", "triangle", "애매"), Triple("x", "close", "틀렸어요")).forEach { (id, ic, t) ->
+            // ○ · △ · ✕ 만 작게. 채점 지우기도 같은 줄(펜을 띄워 올려도, 밀어서 떼도 고름)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf("o" to "circle", "?" to "triangle", "x" to "close").forEach { (id, ic) ->
                     val hot = c.hot == id
                     val col = when (id) { "o" -> Color(0xFF34C759); "?" -> Color(0xFFFF8D28); else -> Color(0xFFFF383C) }
-                    val s by animateFloatAsState(if (hot) 1.06f else 1f, tween(200, easing = Spring), label = "a")
+                    val s by animateFloatAsState(if (hot) 1.12f else 1f, tween(200, easing = Spring), label = "a")
                     val on = hot || g == id
-                    Row(Modifier.weight(1f).height(48.dp).scale(s)
+                    Box(Modifier.size(46.dp).scale(s)
                         .onGloballyPositioned { c.acts[id] = it.boundsInRoot() }
-                        .clip(RoundedCornerShape(24.dp)).background(if (on) col else col.copy(alpha = if (pc.dark) .22f else .13f))
-                        .pointerInput(id) { detectTapGestures { act(ed, c, id) } },
-                        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                        val fg = if (on) Color.White else col
-                        Ic(ic, size = 17.dp, color = fg, stroke = 2f)
-                        Spacer(Modifier.width(5.dp))
-                        BasicText(t, style = txt(16.sp, 600, fg), maxLines = 1)
+                        .clip(CircleShape).background(if (on) col else col.copy(alpha = if (pc.dark) .22f else .13f))
+                        .pointerInput(id) { detectTapGestures { act(ed, c, id) } }, contentAlignment = Alignment.Center) {
+                        Ic(ic, size = 22.dp, color = if (on) Color.White else col, stroke = 2.4f)
                     }
                 }
+                if (g != null || doc.qs!!.rev["${c.idx}"] != null) {
+                    val hot = c.hot == "clear"
+                    Box(Modifier.height(46.dp).onGloballyPositioned { c.acts["clear"] = it.boundsInRoot() }
+                        .clip(RoundedCornerShape(23.dp)).background(if (hot) label else label.copy(alpha = .12f))
+                        .pointerInput(Unit) { detectTapGestures { act(ed, c, "clear") } }.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+                        BasicText("채점 지우기", style = txt(14.sp, 600, if (hot) cardBg else label), maxLines = 1)
+                    }
+                } else c.acts.remove("clear")
             }
         }
         if (!up) { Acts(); Spacer(Modifier.height(12.dp)) }
         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 BasicText((if (doc.ov != null && p.q.isNotBlank()) Y.clean(p.q) + " " else "") + "${p.no}번 정답", Modifier.weight(1f), style = txt((base * .82f).sp, 600, label, .04f))
-                if (g != null || doc.qs!!.rev["${c.idx}"] != null) BasicText("채점 지우기", Modifier.clip(RoundedCornerShape(10.dp)).pointerInput(Unit) { detectTapGestures { act(ed, c, "clear") } }.padding(horizontal = 6.dp, vertical = 2.dp),
-                    style = txt((base * .8f).sp, 500, label))
             }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

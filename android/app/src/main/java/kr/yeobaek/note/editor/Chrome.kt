@@ -148,8 +148,8 @@ fun Chrome(ed: Ed, open: OpenDoc, statusTop: Dp, onExport: (Doc, DocView) -> Uni
         }
         Spacer(Modifier.height(10.dp))
         // 2줄: 모드 전환(그리기 / 파일) + 펜 막대 또는 파일 도구
-        Row(Modifier.fillMaxWidth().height(if (ed.tab == "draw") BAR_H.dp else 72.dp), verticalAlignment = Alignment.CenterVertically) {
-            ModeSwitch(ed)
+        Row(Modifier.fillMaxWidth().height(if (ed.tab == "draw") (BAR_H * PK_K).dp else 60.dp), verticalAlignment = Alignment.CenterVertically) {
+            ModeToggle(ed)
             Spacer(Modifier.width(10.dp))
             if (ed.tab == "draw") {
                 // 끄는 동안에도 원래 막대는 (안 보이게) 남겨 둬야 손가락 끌기가 끊기지 않음
@@ -173,6 +173,26 @@ fun Chrome(ed: Ed, open: OpenDoc, statusTop: Dp, onExport: (Doc, DocView) -> Uni
                 .pointerInput(Unit) { detectTapGestures { ed.collapsed = false; Y.haptic(8) } },
                 contentAlignment = Alignment.Center) { Ic("more", size = 20.dp, color = T.snow) }
         }
+    }
+}
+
+/** 펜 막대 크기 (원본 104 높이의 72%: PDF를 덜 가리게) */
+const val PK_K = .72f
+
+/** 크기를 줄여 그리고 자리도 그만큼만 (누르는 자리도 같이 줄어듦) */
+fun Modifier.shrink(k: Float) = this.layout { m, c ->
+    val p = m.measure(Constraints(maxWidth = if (c.hasBoundedWidth) (c.maxWidth / k).toInt() else Constraints.Infinity, maxHeight = if (c.hasBoundedHeight) (c.maxHeight / k).toInt() else Constraints.Infinity))
+    val w = (p.width * k).roundToInt(); val h = (p.height * k).roundToInt()
+    layout(w, h) { p.placeWithLayer((w - p.width) / 2, (h - p.height) / 2) { scaleX = k; scaleY = k } }
+}
+
+/** 그리기 / 파일 모드를 버튼 하나로: 누를 때마다 바뀜 (지금 모드 아이콘) */
+@Composable
+private fun ModeToggle(ed: Ed) {
+    val draw = ed.tab == "draw"
+    GlassBtn(if (draw) "pencil" else "doc", if (draw) "그리기 모드 (누르면 파일)" else "파일 모드 (누르면 그리기)", tint = KIT_BLUE) {
+        ed.tab = if (draw) "file" else "draw"; Overlay.closePop(); Y.haptic(8)
+        if (!draw.not() && Y.mode == "lasso") ed.view?.clearSel()
     }
 }
 
@@ -231,7 +251,7 @@ private fun AttachedPicker(ed: Ed, modifier: Modifier) {
             }
         }
     }
-    ToolPicker(ed, modifier.onGloballyPositioned { bounds = it.boundsInRoot() }.graphicsLayer { translationX = pull.value.x; translationY = pull.value.y }, dragger)
+    ToolPicker(ed, Modifier.shrink(PK_K).then(modifier).onGloballyPositioned { bounds = it.boundsInRoot() }.graphicsLayer { translationX = pull.value.x; translationY = pull.value.y }, dragger)
 }
 
 /** 떼어 낸 막대가 원래 있던 자리 (다시 붙일 수 있는 자석 자리) */
@@ -292,7 +312,7 @@ fun FloatingPicker(ed: Ed) {
         Box(Modifier.offset { IntOffset(pos.x.roundToInt(), pos.y.roundToInt()) }.zIndex(5f)
             .onSizeChanged { size = it }
             .then(if (vertical) Modifier.rotated(if (dock == "left") 90f else -90f) else Modifier)) {
-            ToolPicker(ed, Modifier.width(if (vertical) minOf(mh - with(d) { ed.chromeH.toDp() } - 60.dp, 680.dp) else wDp), dragger)
+            ToolPicker(ed, Modifier.shrink(PK_K).width(if (vertical) minOf(mh - with(d) { ed.chromeH.toDp() } - 60.dp, 680.dp) else wDp), dragger)
         }
     }
 }
