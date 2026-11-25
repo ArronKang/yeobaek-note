@@ -29,7 +29,7 @@ object Sym {
         "ruler" to 0x7c0, "triangle" to 0x4c2, "wrong" to 0x060, "wrongfill" to 0x061, "rightfill" to 0x063, "right" to 0x062,
         "sliders" to 0x306, "wand" to 0x371, "rows" to 0x9ca, "cols" to 0x9c8, "grid4" to 0x9cc,
         "tray" to 0x223, "doc" to 0x237, "docfill" to 0x238, "binx" to 0x231, "warn" to 0x1fe, "book" to 0x25a,
-        "pencilcircle" to 0x20b, "magnify" to 0x579, "zoomin" to 0x2ac, "zoomout" to 0x2ad,
+        "pencilcircle" to 0x20b, "flag" to 0x2c9, "heart" to 0x2b4, "cap" to 0xad3, "atom" to 0xb1a, "fx" to 0x16e, "globe" to 0x1aa, "leaf" to 0x972, "music" to 0x46a, "brain" to 0xbd0, "folderfill" to 0x216, "circle" to 0x000, "checkcircle" to 0x062, "magnify" to 0x579, "zoomin" to 0x2ac, "zoomout" to 0x2ad,
     )
     fun cp(name: String): String? = map[name]?.let { String(Character.toChars(B + it)) }
 

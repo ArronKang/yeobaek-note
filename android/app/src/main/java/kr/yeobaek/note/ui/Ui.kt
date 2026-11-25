@@ -183,10 +183,10 @@ private fun PopoverBox(spec: PopSpec) {
         Column(Modifier.offset { pos }.onSizeChanged { size = it }
             .then(if (spec.width != null) Modifier.width(spec.width) else Modifier.widthIn(min = 160.dp, max = 340.dp))
             .graphicsLayer { val s = .9f + .1f * a.value; scaleX = s; scaleY = s; alpha = (a.value * 6).coerceAtMost(1f); transformOrigin = TransformOrigin(ox, if (up) 1f else 0f) }
-            .shadow(16.dp, RoundedCornerShape(14.dp), ambientColor = Color(0x24212529), spotColor = Color(0x24212529))
-            .background(T.raise, RoundedCornerShape(14.dp)).border(.5.dp, T.hair, RoundedCornerShape(14.dp))
+            .shadow(28.dp, RoundedCornerShape(26.dp), ambientColor = Color(0x40000000), spotColor = Color(0x40000000))
+            .background(if (T.dark) Color(0xFF2C2C2E) else Color(0xFFFAFAFA), RoundedCornerShape(26.dp)).border(.5.dp, T.hair, RoundedCornerShape(26.dp))
             .heightIn(max = with(d) { ((screen.height - insT - insB) * .8f).toDp() }.coerceAtLeast(120.dp))
-            .verticalScroll(rememberScrollState()).padding(8.dp)) { spec.content(this) }
+            .verticalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 12.dp)) { spec.content(this) }
     }
 }
 
@@ -214,12 +214,12 @@ private fun ModalBox(m: ModalSpec) {
             .background(T.bg).pointerInput(Unit) { detectTapGestures { } }) { m.content(close) }
         return
     }
-    Box(Modifier.fillMaxSize().background(Color(0x38212529).copy(alpha = .22f * a.value))
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .16f * a.value))
         .pointerInput(m) { detectTapGestures { if (m.dismissable) close() } }, contentAlignment = Alignment.Center) {
         Box(Modifier.padding(16.dp).widthIn(max = m.width).fillMaxWidth()
             .graphicsLayer { translationY = (1 - a.value) * 14.dp.toPx(); alpha = (a.value * 3).coerceAtMost(1f) }
-            .shadow(20.dp, RoundedCornerShape(14.dp), ambientColor = Color(0x24212529), spotColor = Color(0x24212529))
-            .background(T.raise, RoundedCornerShape(14.dp)).pointerInput(Unit) { detectTapGestures { } }
+            .shadow(30.dp, RoundedCornerShape(34.dp), ambientColor = Color(0x2E000000), spotColor = Color(0x2E000000))
+            .background(T.raise, RoundedCornerShape(34.dp)).pointerInput(Unit) { detectTapGestures { } }
             .padding(if (m.width <= 380.dp) 24.dp else 28.dp)) { m.content(close) }
     }
 }

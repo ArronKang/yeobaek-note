@@ -549,7 +549,19 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     private val main = Handler(Looper.getMainLooper())
     private val saveRun = Runnable { Docs.save(doc) }
     fun queueSave() { main.removeCallbacks(saveRun); main.postDelayed(saveRun, YY.settings.autosave.toLong().coerceAtLeast(0)) }
-    fun saveNow() { main.removeCallbacks(saveRun); Docs.save(doc) }
+    fun saveNow() { main.removeCallbacks(saveRun); Docs.save(doc); saveThumb() }
+
+    /** 노트 첫 쪽 그림을 서재 표지로 (표지를 고르지 않은 '자동' 표지) */
+    private fun saveThumb() {
+        if (doc.type != "note" || doc.pages.isEmpty() || W <= 0f) return
+        val id = doc.libId ?: doc.id
+        val n = YY.lib.notes.find { it.id == id } ?: return
+        runCatching {
+            val bm = thumb(0, 360)
+            kr.yeobaek.note.data.Store.file("thumbs/n_$id.png").outputStream().use { bm.compress(Bitmap.CompressFormat.PNG, 90, it) }
+            if (n.thumb != "n_$id.png") { n.thumb = "n_$id.png"; YY.saveLib() } else YY.libRev++
+        }
+    }
 
     /* =============== 올가미 선택 =============== */
     class Sel(val pi: Int, var strokes: MutableList<Stroke>, var box: FloatArray)

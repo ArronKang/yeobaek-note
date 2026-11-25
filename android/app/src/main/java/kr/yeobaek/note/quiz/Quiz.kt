@@ -102,9 +102,9 @@ object Quiz {
 
     fun setGrade(doc: Doc, i: Int, v: String) {
         val qs = doc.qs!!; val k = "$i"
-        if (v == "clear") { qs.rev.remove(k); qs.grade.remove(k); saveState(doc); Y.haptic(10); return }
+        if (v == "clear") { qs.rev.remove(k); qs.grade.remove(k); saveState(doc); kr.yeobaek.note.library.Wrong.syncBack(doc, i, v); Y.haptic(10); return }
         qs.rev[k] = mapOf("ans" to 1); qs.grade[k] = v
-        saveState(doc); Y.haptic(12)
+        saveState(doc); kr.yeobaek.note.library.Wrong.syncBack(doc, i, v); Y.haptic(12)
     }
 
     /** 전체 채점: 고른 보기만. 점수는 이때부터 보여요 */
@@ -115,6 +115,7 @@ object Quiz {
             if (p.type != "choice" || s == null) return@forEachIndexed
             qs.grade["$i"] = if (isRight(doc, i, s) == true) "o" else "x"
             qs.rev["$i"] = mapOf("ans" to 1); n++
+            kr.yeobaek.note.library.Wrong.syncBack(doc, i, qs.grade["$i"]!!)
         }
         qs.scored = true
         saveState(doc); Y.haptic(15)

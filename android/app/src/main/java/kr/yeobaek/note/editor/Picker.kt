@@ -720,3 +720,25 @@ fun <V> MiniSegWide(value: V, opts: List<Pair<V, String>>, onPick: (V) -> Unit) 
         }
     }
 }
+
+/** 색 하나 고르기 (Apple 키트 색 격자 12×10): 표지 색 같은 곳에 씀 */
+fun gridColorPop(r: Rect, cur: String?, title: String = "색", onPick: (String) -> Unit) {
+    Overlay.popover("grid$title", r, 372.dp, "center") {
+        Box(Modifier.fillMaxWidth().height(44.dp)) {
+            BasicText(title, Modifier.align(Alignment.Center), style = txt(17.sp, 600, T.snow))
+            Box(Modifier.align(Alignment.CenterEnd).padding(end = 4.dp).size(30.dp).background(Color(0x1F787880), CircleShape)
+                .pointerInput(Unit) { detectTapGestures { Overlay.closePop() } }, contentAlignment = Alignment.Center) { Ic("close", size = 14.dp, color = T.ink2, stroke = 2f) }
+        }
+        Canvas(Modifier.fillMaxWidth().padding(4.dp).height(250.dp).clip(RoundedCornerShape(10.dp))
+            .pointerInput(Unit) {
+                detectTapGestures { o ->
+                    val c = (o.x / size.width * 12).toInt().coerceIn(0, 11); val rw = (o.y / size.height * 10).toInt().coerceIn(0, 9)
+                    Y.haptic(6); onPick(PK.GRID[rw][c]); Overlay.closePop()
+                }
+            }) {
+            val cw = size.width / 12; val ch = size.height / 10
+            PK.GRID.forEachIndexed { rw, row -> row.forEachIndexed { c, hex -> drawRect(Color(Ink.parse(hex)), Offset(c * cw, rw * ch), Size(cw + .5f, ch + .5f)) } }
+            PK.GRID.forEachIndexed { rw, row -> row.forEachIndexed { c, hex -> if (hex.equals(cur, true)) drawRect(Color.White, Offset(c * cw + 1.5.dp.toPx(), rw * ch + 1.5.dp.toPx()), Size(cw - 3.dp.toPx(), ch - 3.dp.toPx()), style = Stroke(3.dp.toPx())) } }
+        }
+    }
+}

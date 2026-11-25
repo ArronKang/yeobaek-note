@@ -99,7 +99,7 @@ class NoteMeta(
 )
 
 @Serializable
-class Folder(var id: String, var name: String, var parent: String? = null)
+class Folder(var id: String, var name: String, var parent: String? = null, var icon: String? = null)
 
 @Serializable
 class Library(var folders: MutableList<Folder> = ArrayList(), var notes: MutableList<NoteMeta> = ArrayList())

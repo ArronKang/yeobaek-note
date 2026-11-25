@@ -86,7 +86,10 @@ object Y {
 
     fun uid(): String = java.lang.Long.toString(System.currentTimeMillis(), 36) + (1..4).map { "0123456789abcdefghijklmnopqrstuvwxyz"[Random.nextInt(36)] }.joinToString("")
 
-    fun cover(id: String?) = COVERS.find { it.id == id } ?: COVERS[0]
+    /** 표지: 정해진 8색, 사용자 색(#RRGGBB), auto(첫 쪽 그림) */
+    fun cover(id: String?): Cover = COVERS.find { it.id == id }
+        ?: id?.takeIf { it.startsWith("#") }?.let { Cover(it, "사용자 색", 0xFF000000 or (kr.yeobaek.note.ink.Ink.parse(it).toLong() and 0xFFFFFF)) }
+        ?: COVERS[0]
 
     /** 화면에 보이는 글자에서 가운뎃점(·) 빼기 */
     fun clean(s: String?): String = (s ?: "").replace(Regex("\\s*[·•]\\s*"), " ").replace(Regex("\\s{2,}"), " ").trim()
