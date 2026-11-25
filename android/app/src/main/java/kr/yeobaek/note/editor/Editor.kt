@@ -150,6 +150,8 @@ class Card(val v: DocView, val pi: Int, val idx: Int, val x: Float, val y: Float
     var hot by mutableStateOf<String?>(null)
     var dragging = press
     var hover = false; var seen = false
+    /** 버튼 밖에서 민 방향으로 눌린 상태 */
+    var dirHot = false
     val acts = HashMap<String, Rect>()
     var bounds = Rect.Zero
 }
@@ -203,10 +205,11 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
             v.setCard(pi, idx)
             if (Quiz.reveal(v.doc, idx)) v.animate(idx, listOf("stamp", "mark"))
         }
-        override fun cardDrag(x: Float, y: Float) { val c = ed.card ?: return; setHot(c, rx(x), ry(y)) }
+        override fun cardDrag(x: Float, y: Float) { val c = ed.card ?: return; setHot(c, rx(x), ry(y), d.density) }
         override fun cardUp(x: Float, y: Float, pen: Boolean) {
             val c = ed.card ?: return; c.dragging = false
-            val h = hitAct(c, rx(x), ry(y))
+            // 버튼 위에서 떼거나, 버튼 밖이어도 밀던 방향(왼쪽 맞았어요, 아래 애매, 오른쪽 틀렸어요)으로 눌려 있던 것
+            val h = hitAct(c, rx(x), ry(y)) ?: c.hot?.takeIf { c.dirHot }
             if (h != null) { c.hot = null; act(ed, c, h); return }
             if (pen) {
                 // 펜 호버 단계: 곧 호버 움직임이 안 오면(멀리 듦) 닫힘
@@ -313,7 +316,19 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
 }
 
 private fun hitAct(c: Card, x: Float, y: Float): String? = c.acts.entries.firstOrNull { it.value.contains(androidx.compose.ui.geometry.Offset(x, y)) }?.key
-private fun setHot(c: Card, x: Float, y: Float) { val h = hitAct(c, x, y); if (h != c.hot) { c.hot = h; if (h != null) Y.haptic(6) } }
+/**
+ * 꾹 누른 채: 버튼 위면 그 버튼, 아니면 누른 자리에서 조금이라도 민 방향의 버튼이 눌린 상태
+ * (왼쪽 = 맞았어요, 아래·위 = 애매, 오른쪽 = 틀렸어요)
+ */
+private fun setHot(c: Card, x: Float, y: Float, density: Float = 2f) {
+    var h = hitAct(c, x, y); var dir = false
+    if (h == null && c.dragging) {
+        val dx = x - c.x; val dy = y - c.y
+        if (kotlin.math.hypot(dx, dy) > 14f * density) { dir = true; h = if (kotlin.math.abs(dx) > kotlin.math.abs(dy)) (if (dx < 0) "o" else "x") else "?" }
+    }
+    c.dirHot = dir
+    if (h != c.hot) { c.hot = h; if (h != null) Y.haptic(6) }
+}
 internal fun act(ed: Ed, c: Card, v: String) {
     Quiz.setGrade(c.v.doc, c.idx, v)
     if (v != "clear") c.v.animate(c.idx, listOf("mark"))
@@ -537,61 +552,69 @@ private fun QuizCard(ed: Ed, doc: Doc, c: Card, close: () -> Unit) {
     val ox = ((c.x - left) / max(1f, right - left)).coerceIn(0f, 1f)
     val g = doc.qs!!.grade["${c.idx}"]
 
+    // Apple 카드: 모서리 26, 버튼은 고정하고 긴 해설만 안에서 스크롤 (해설이 아무리 길어도 카드 밖으로 안 나감)
+    val maxH = with(d) { min(520f * k, (pageBottom - pageTop) * .8f).toDp() }
     Column(Modifier.offset { IntOffset(left.roundToInt(), top.roundToInt()) }.width(wDp)
         .onSizeChanged { hpx = it.height.toFloat() }
         .onGloballyPositioned { c.bounds = it.boundsInRoot() }
         .graphicsLayer { alpha = if (hpx == 0f) 0f else (a.value * 7).coerceAtMost(1f); val s = .92f + .08f * a.value; scaleX = s; scaleY = s; transformOrigin = TransformOrigin(ox, if (up) 1f else 0f) }
-        .shadow(18.dp, RoundedCornerShape(14.dp), ambientColor = Color(0x2E212529), spotColor = Color(0x2E212529))
-        .background(cardBg, RoundedCornerShape(14.dp)).border(1.dp, Color(pc.line2), RoundedCornerShape(14.dp))
-        .heightIn(max = with(d) { (520f * k).toDp() }).verticalScroll(rememberScrollState())
-        .padding(horizontal = (base * 1.2f).dp, vertical = (base * 1f).dp)) {
+        .shadow(24.dp, RoundedCornerShape(26.dp), ambientColor = Color(0x33000000), spotColor = Color(0x33000000))
+        .background(cardBg, RoundedCornerShape(26.dp)).border(.5.dp, Color(pc.line2), RoundedCornerShape(26.dp))
+        .heightIn(max = maxH)
+        .padding(horizontal = (base * 1.15f).dp, vertical = (base * 1f).dp)) {
         @Composable fun Acts() {
-            // 답안 제거 · 맞았어요 · 틀렸어요 — 누른 채로 밀어서 고르거나 눌러서 골라요
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy((6f * k / d.density).dp)) {
-                listOf(Triple("clear", "reset", "답안 제거"), Triple("o", "check", "맞았어요"), Triple("x", "close", "틀렸어요")).forEach { (id, ic, t) ->
+            // 맞았어요 · 애매 · 틀렸어요: 눌러서, 또는 꾹 누른 채 그 버튼 위로 / 왼쪽·아래·오른쪽으로 조금 밀고 떼서
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(Triple("o", "check", "맞았어요"), Triple("?", "triangle", "애매"), Triple("x", "close", "틀렸어요")).forEach { (id, ic, t) ->
                     val hot = c.hot == id
-                    val col = when (id) { "o" -> green; "x" -> red; else -> ink }
+                    val col = when (id) { "o" -> Color(0xFF34C759); "?" -> Color(0xFFFF8D28); else -> Color(0xFFFF383C) }
                     val s by animateFloatAsState(if (hot) 1.06f else 1f, tween(200, easing = Spring), label = "a")
-                    Row(Modifier.weight(1f).height(with(d) { (34f * k).toDp() }.coerceAtLeast(40.dp)).scale(s)
+                    val on = hot || g == id
+                    Row(Modifier.weight(1f).height(48.dp).scale(s)
                         .onGloballyPositioned { c.acts[id] = it.boundsInRoot() }
-                        .clip(RoundedCornerShape(10.dp)).background(if (hot) col else cardBg)
-                        .border(1.dp, if (g == id && !hot) ink else Color(pc.line2), RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(24.dp)).background(if (on) col else col.copy(alpha = if (pc.dark) .22f else .13f))
                         .pointerInput(id) { detectTapGestures { act(ed, c, id) } },
                         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                        val fg = if (hot) Color(pc.paper) else col
-                        Ic(ic, size = (base * 1.15f).dp, color = fg)
-                        Spacer(Modifier.width(4.dp))
-                        BasicText(t, style = txt((base * .88f).sp, 600, fg), maxLines = 1)
+                        val fg = if (on) Color.White else col
+                        Ic(ic, size = 17.dp, color = fg, stroke = 2f)
+                        Spacer(Modifier.width(5.dp))
+                        BasicText(t, style = txt(16.sp, 600, fg), maxLines = 1)
                     }
                 }
             }
         }
-        if (!up) { Acts(); Spacer(Modifier.height(10.dp)) }
-        BasicText("${p.no}번 정답", style = txt((base * .82f).sp, 600, label, .04f))
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        if (!up) { Acts(); Spacer(Modifier.height(12.dp)) }
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BasicText("${p.no}번 정답", Modifier.weight(1f), style = txt((base * .82f).sp, 600, label, .04f))
+                if (g != null || doc.qs!!.rev["${c.idx}"] != null) BasicText("채점 지우기", Modifier.clip(RoundedCornerShape(10.dp)).pointerInput(Unit) { detectTapGestures { act(ed, c, "clear") } }.padding(horizontal = 6.dp, vertical = 2.dp),
+                    style = txt((base * .8f).sp, 500, label))
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (p.type == "choice") {
+                    val ai = p.answer.toIntOrNull() ?: 1
+                    BasicText(QuizLayout.CIRC.getOrElse(ai - 1) { p.answer }, style = txt((base * 1.85f).sp, 600, red))
+                    Spacer(Modifier.width(10.dp))
+                    p.choices.getOrNull(ai - 1)?.let { TexText(it, base * 1.5f, ink, 500, modifier = Modifier.weight(1f)) }
+                } else TexText(p.answer, base * 1.5f, ink, 600, modifier = Modifier.fillMaxWidth())
+            }
             if (p.type == "choice") {
-                val ai = p.answer.toIntOrNull() ?: 1
-                BasicText(QuizLayout.CIRC.getOrElse(ai - 1) { p.answer }, style = txt((base * 1.85f).sp, 600, red))
-                Spacer(Modifier.width(10.dp))
-                p.choices.getOrNull(ai - 1)?.let { TexText(it, base * 1.5f, ink, 500) }
-            } else TexText(p.answer, base * 1.5f, ink, 600)
-        }
-        if (p.type == "choice") {
-            val sel = doc.qs!!.sel["${c.idx}"]
-            if (sel != null) {
-                val right = Quiz.isRight(doc, c.idx, sel) == true
+                val sel = doc.qs!!.sel["${c.idx}"]
+                if (sel != null) {
+                    val right = Quiz.isRight(doc, c.idx, sel) == true
+                    Spacer(Modifier.height(4.dp))
+                    BasicText(if (right) "맞았어요" else "내 답 " + QuizLayout.CIRC.getOrElse(sel - 1) { "$sel" }, style = txt((base * .95f).sp, 600, if (right) green else red))
+                }
+            }
+            if (p.solution.isNotBlank()) {
+                Spacer(Modifier.height(12.dp)); Box(Modifier.fillMaxWidth().height(.5.dp).background(Color(pc.line2))); Spacer(Modifier.height(8.dp))
+                BasicText("풀이", style = txt((base * .82f).sp, 600, label, .04f))
                 Spacer(Modifier.height(4.dp))
-                BasicText(if (right) "맞았어요" else "내 답 " + QuizLayout.CIRC.getOrElse(sel - 1) { "$sel" }, style = txt((base * .95f).sp, 600, if (right) green else red))
+                TexText(p.solution, base, ink, 400, lineH = 1.7f, modifier = Modifier.fillMaxWidth())
             }
         }
-        if (p.solution.isNotBlank()) {
-            Spacer(Modifier.height(12.dp)); Box(Modifier.fillMaxWidth().height(1.dp).background(Color(pc.line2))); Spacer(Modifier.height(8.dp))
-            BasicText("풀이", style = txt((base * .82f).sp, 600, label, .04f))
-            Spacer(Modifier.height(4.dp))
-            TexText(p.solution, base, ink, 400, lineH = 1.7f)
-        }
-        if (up) { Spacer(Modifier.height(10.dp)); Acts() }
+        if (up) { Spacer(Modifier.height(12.dp)); Acts() }
     }
 }
 

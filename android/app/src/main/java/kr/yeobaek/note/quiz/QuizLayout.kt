@@ -200,6 +200,8 @@ object QuizLayout {
         -0.88f, 0f, 0f, 0f, 255f * 0.94f, 0f, -0.88f, 0f, 0f, 255f * 0.94f, 0f, 0f, -0.88f, 0f, 255f * 0.94f, 0f, 0f, 0f, 1f, 0f)))
     private val markO = PathParser.createPathFromPathData("M21 4.5c-9 0-16.5 6.5-16.5 15.8 0 9.4 7.3 15.4 15.9 15.2 9.2-.2 15.6-6.8 15.1-15.6C35.1 11 28.6 4.3 18.8 5.6")
     private val markX = PathParser.createPathFromPathData("M9 33C16 24 24 14 33 5")
+    /** 애매: 손으로 그은 세모 */
+    private val markT = PathParser.createPathFromPathData("M20.5 6c4.6 8.6 9.3 17.4 14 26.2-9.8.4-19.6.6-29.5.8C9.6 24 15 15 20.5 6")
     private val swoosh = PathParser.createPathFromPathData("M4 12c22-5 52-7 112-4")
     private val starP = PathParser.createPathFromPathData("M12 4l2.4 5 5.4.7-4 3.8 1 5.4L12 16.3 7.2 18.9l1-5.4-4-3.8L9.6 9z")
 
@@ -296,7 +298,7 @@ object QuizLayout {
         if (g != null) {
             val a = anims.find { it.kind == "mark" }
             cv.save(); cv.translate(ncx - lp(20f), ncy - lp(20f) * 1.04f); cv.scale(L, L)
-            stroke(cv, if (g == "o") markO else markX, c.red, 2.6f, easeOut(prog(a, now, 550f)))
+            stroke(cv, when (g) { "o" -> markO; "?" -> markT; else -> markX }, c.red, 2.6f, easeOut(prog(a, now, 550f)))
             cv.restore()
         }
         // 별표
