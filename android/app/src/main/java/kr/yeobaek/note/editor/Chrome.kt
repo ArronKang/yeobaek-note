@@ -472,6 +472,7 @@ private fun solutionsPop(r: Rect, doc: Doc, v: DocView) {
         doc.quiz!!.problems.withIndex().filter { !it.value.isPassage }.forEach { (i, p) ->
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).pointerInput(i) { detectTapGestures { Overlay.closePop(); v.goToProblem(i) } }.padding(10.dp)) {
                 val ans = if (p.type == "choice") QuizLayout.CIRC.getOrElse((p.answer.toIntOrNull() ?: 1) - 1) { p.answer } else p.answer
+                if (doc.ov != null && p.q.isNotBlank() && (i == 0 || doc.quiz.problems[i - 1].q != p.q)) BasicText(Y.clean(p.q), Modifier.padding(bottom = 4.dp), style = txt(13.sp, 600, T.ink2))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     BasicText("${p.no}", Modifier.width(30.dp), style = txt(14.sp, 700, KIT_BLUE))
                     BasicText("정답 $ans", style = txt(14.sp, 600, T.snow), maxLines = 2, overflow = TextOverflow.Ellipsis)

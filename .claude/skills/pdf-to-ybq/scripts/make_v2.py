@@ -51,44 +51,76 @@ def page_items(page):
     return W, H, nums, circs
 
 
-def detect(doc):
+def page_section(page, rx):
+    """쪽 위쪽 몇 줄에서 단원 이름 (예: 3과 본문 1, 부교재 3-3, 10모 20번)"""
+    if rx is None:
+        return None
+    for line in page.get_text().split(chr(10))[:6]:
+        m = rx.match(line.strip())
+        if m:
+            return m.group(0)
+    return None
+
+
+def detect(doc, sec_rx=None):
     pages = [page_items(p) for p in doc]
-    # 두 단인지: 번호 후보의 절반 넘게가 오른쪽 절반에도 있으면
+    secs = [page_section(p, sec_rx) for p in doc]
     def col(W, b):
         return 0 if b[0] < W * 0.5 else 1
+    two = [any(col(W, n["box"]) == 1 for n in nums) and any(col(W, n["box"]) == 0 for n in nums) for (W, H, nums, _) in pages]
     cands = []
     for pi, (W, H, nums, _) in enumerate(pages):
         for n in nums:
-            cands.append((pi, col(W, n["box"]), n["box"][1], n))
+            cands.append((pi, col(W, n["box"]) if two[pi] else 0, n["box"][1], n))
     cands.sort(key=lambda t: (t[0], t[1], t[2]))
-    # 1, 2, 3 … 순서를 이루는 것만 (가장 긴 증가 수열을 앞에서부터 탐욕적으로)
-    probs, want = [], 1
+    # 1, 2, 3 … 순서. 단원 이름이 바뀌거나(있으면) 1번이 다시 나오면 새 단원
+    probs, want, sec, k = [], 1, None, 0
+    seen = set()
     for pi, c, y, n in cands:
+        ps = secs[pi]
+        if ps is not None and ps != sec:
+            # 이미 끝난 단원 이름이 다시 나오면(맨 뒤 답안지 등) 건너뜀
+            if ps in seen:
+                sec = "__skip__"; continue
+            sec = ps; want = 1; k += 1; seen.add(ps)
+        if sec_rx is not None and (sec is None or sec == "__skip__"):
+            continue
         if n["no"] == want:
-            probs.append({"no": n["no"], "page": pi, "col": c, "num": n["box"]})
-            want += 1
-    # 문항 영역: 같은 쪽·같은 단의 다음 번호 전까지
+            pass
+        elif n["no"] == 1 and want > 1 and sec_rx is None:
+            k += 1; want = 1
+        else:
+            continue
+        probs.append({"no": n["no"], "page": pi, "col": c, "num": n["box"], "sec": sec if sec is not None else (str(k) if k > 1 else "")})
+        want += 1
+    # 문항 영역: 번호부터 같은 쪽·같은 단의 다음 번호 전까지. 단·쪽의 마지막 문항은 다음 단(쪽) 맨 위 번호 전까지 이어짐
+    def regions(i, p):
+        W, H = pages[p["page"]][0], pages[p["page"]][1]
+        x0, x1 = (0, W) if not two[p["page"]] else ((0, W * .5) if p["col"] == 0 else (W * .5, W))
+        nxt = probs[i + 1] if i + 1 < len(probs) else None
+        same = nxt is not None and nxt["page"] == p["page"] and nxt["col"] == p["col"]
+        out = [(p["page"], x0, p["num"][1] - 2, x1, nxt["num"][1] - 2 if same else H)]
+        if not same and nxt is not None and nxt["sec"] == p["sec"]:
+            # 다음 문항이 다른 단·쪽이면 그 단 맨 위(번호 전)까지도
+            W2, H2 = pages[nxt["page"]][0], pages[nxt["page"]][1]
+            a0, a1 = (0, W2) if not two[nxt["page"]] else ((0, W2 * .5) if nxt["col"] == 0 else (W2 * .5, W2))
+            out.append((nxt["page"], a0, 0, a1, nxt["num"][1] - 2))
+        return out
     for i, p in enumerate(probs):
-        W, H, _, circs = pages[p["page"]]
-        nxt = next((q for q in probs[i + 1:] if q["page"] == p["page"] and q["col"] == p["col"]), None)
-        y0 = p["num"][1] - 2
-        y1 = nxt["num"][1] - 2 if nxt else H
-        x0, x1 = (0, W * 0.5) if p["col"] == 0 else (W * 0.5, W)
-        two = any(q["col"] == 1 for q in probs if q["page"] == p["page"])
-        if not two:
-            x0, x1 = 0, W
-        mine = [c for c in circs if x0 <= c["box"][0] < x1 and y0 <= c["box"][1] < y1]
         last = {}
-        for c in mine:
-            last[c["n"]] = c["box"]          # 같은 숫자는 마지막 것
-        ks = sorted(last)
-        # 1부터 이어지는 것만
+        rs = regions(i, p)
+        for (pg, x0, y0, x1, y1) in rs:
+            for c in pages[pg][3]:
+                if x0 <= c["box"][0] < x1 and y0 <= c["box"][1] < y1:
+                    last[c["n"]] = (pg, c["box"])          # 같은 숫자는 마지막 것
         seq = []
-        for k in ks:
-            if k == len(seq) + 1:
-                seq.append(last[k])
-        p["choices"] = seq
-        p["area"] = [x0, y0, x1, y1]
+        for kk in sorted(last):
+            if kk == len(seq) + 1:
+                seq.append(last[kk])
+        # 보기가 다른 쪽에 있으면 그 쪽 기준 (앱은 문항 쪽만 봄): 같은 쪽 것만 남김
+        p["choices"] = [b for (pg, b) in seq if pg == p["page"]] if all(pg == p["page"] for (pg, b) in seq) else [b for (pg, b) in seq]
+        p["choice_page"] = seq[0][0] if seq else p["page"]
+        p["area"] = list(rs[0][1:])
     return pages, probs
 
 
@@ -96,11 +128,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("pdf"); ap.add_argument("answers"); ap.add_argument("out")
     ap.add_argument("--boxes"); ap.add_argument("--preview")
+    ap.add_argument("--section", help="단원 이름 정규식 (예: '\d+과 본문 \d+|부교재 [\d~-]+|10모 [\d~]+번')")
     a = ap.parse_args()
     doc = fitz.open(a.pdf)
     ans = json.load(open(a.answers, encoding="utf-8"))
     A = {str(k): str(v) for k, v in ans.get("answers", {}).items()}
     S = {str(k): str(v) for k, v in ans.get("solutions", {}).items()}
+    SEC = ans.get("sections", {})       # {단원 이름: {"answers": {...}, "solutions": {...}}}
+    def ga(sec, no):
+        if sec and sec in SEC:
+            return str(SEC[sec].get("answers", {}).get(str(no), "")), str(SEC[sec].get("solutions", {}).get(str(no), ""))
+        return A.get(str(no), ""), S.get(str(no), "")
     out = []
     if a.boxes:
         bx = json.load(open(a.boxes, encoding="utf-8")); k = 72.0 / bx.get("dpi", 110)
@@ -111,31 +149,36 @@ def main():
             out.append({"no": p["no"], "page": p["page"] - 1, "num": f(p["num"]), "type": "choice" if ch else "short", "choices": ch,
                         "answer": A.get(str(p["no"]), ""), "solution": S.get(str(p["no"]), "")})
     else:
-        pages, probs = detect(doc)
+        pages, probs = detect(doc, re.compile(a.section) if a.section else None)
         for p in probs:
             W, H = pages[p["page"]][0], pages[p["page"]][1]
             f = lambda r: [round(r[0] / W, 5), round(r[1] / H, 5), round(r[2] / W, 5), round(r[3] / H, 5)]
             ch = [f(c) for c in p["choices"]]
-            out.append({"no": p["no"], "page": p["page"], "num": f(p["num"]), "type": "choice" if ch else "short", "choices": ch,
-                        "answer": A.get(str(p["no"]), ""), "solution": S.get(str(p["no"]), ""), "area": f(p["area"])})
+            an, so = ga(p["sec"], p["no"])
+            q = {"no": p["no"], "page": p["page"], "num": f(p["num"]), "type": "choice" if ch else "short", "choices": ch,
+                 "answer": an, "solution": so, "area": f(p["area"])}
+            if p["sec"]: q["sec"] = p["sec"]
+            if p["choice_page"] != p["page"]: q["cpage"] = p["choice_page"]
+            out.append(q)
     q = {"ybq": 2, "title": ans.get("title", os.path.splitext(os.path.basename(a.pdf))[0]), "subject": ans.get("subject", ""), "problems": out}
     with zipfile.ZipFile(a.out, "w", zipfile.ZIP_DEFLATED) as z:
         z.write(a.pdf, "original.pdf")
         z.writestr("quiz.json", json.dumps(q, ensure_ascii=False, indent=1))
-    miss = [p["no"] for p in out if not p["answer"]]
+    miss = [(p.get("sec", "") + " " + str(p["no"])).strip() for p in out if not p["answer"]]
     print(f"문항 {len(out)}개 (객관식 {sum(1 for p in out if p['type']=='choice')}), 정답 없는 문항: {miss or '없음'}")
     for p in out:
         if p["type"] == "choice" and len(p["choices"]) < 4:
-            print(f"  확인 필요: {p['no']}번 보기 칸 {len(p['choices'])}개")
+            print(f"  확인 필요: {p.get('sec', '')} {p['no']}번 보기 칸 {len(p['choices'])}개")
     if a.preview:
         # 쪽마다 번호 칸(파랑)·보기 칸(초록)을 그린 그림: 눈으로 확인용
         os.makedirs(a.preview, exist_ok=True)
         for pi, pg in enumerate(doc):
             W, H = pg.rect.width, pg.rect.height
             for p in out:
-                if p["page"] != pi:
+                if p["page"] == pi:
+                    r = p["num"]; pg.draw_rect(fitz.Rect(r[0] * W, r[1] * H, r[2] * W, r[3] * H), color=(0, .5, 1), width=1.2)
+                if p.get("cpage", p["page"]) != pi:
                     continue
-                r = p["num"]; pg.draw_rect(fitz.Rect(r[0] * W, r[1] * H, r[2] * W, r[3] * H), color=(0, .5, 1), width=1.2)
                 for c in p["choices"]:
                     pg.draw_rect(fitz.Rect(c[0] * W, c[1] * H, c[2] * W, c[3] * H), color=(0, .7, .2), width=1)
             pg.get_pixmap(dpi=90).save(os.path.join(a.preview, f"p{pi + 1}.png"))

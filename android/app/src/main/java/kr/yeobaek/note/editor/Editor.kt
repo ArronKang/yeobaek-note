@@ -586,7 +586,7 @@ private fun QuizCard(ed: Ed, doc: Doc, c: Card, close: () -> Unit) {
         if (!up) { Acts(); Spacer(Modifier.height(12.dp)) }
         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                BasicText("${p.no}번 정답", Modifier.weight(1f), style = txt((base * .82f).sp, 600, label, .04f))
+                BasicText((if (doc.ov != null && p.q.isNotBlank()) Y.clean(p.q) + " " else "") + "${p.no}번 정답", Modifier.weight(1f), style = txt((base * .82f).sp, 600, label, .04f))
                 if (g != null || doc.qs!!.rev["${c.idx}"] != null) BasicText("채점 지우기", Modifier.clip(RoundedCornerShape(10.dp)).pointerInput(Unit) { detectTapGestures { act(ed, c, "clear") } }.padding(horizontal = 6.dp, vertical = 2.dp),
                     style = txt((base * .8f).sp, 500, label))
             }

@@ -26,7 +26,7 @@ import kotlin.math.min
  * quiz.json: { ybq: 2, title, subject, problems: [{ no, page, num: [x0,y0,x1,y1], type: choice|short, choices: [[…]…], answer, solution, area? }] }
  * 좌표는 쪽 폭·높이에 대한 비율(0~1). 펜은 늘 필기, 번호 칸을 꾹 = 보기 위 필기를 읽어 채점 + 정답 카드, 보기 칸을 손가락으로 톡 = 고르기.
  */
-class OvProblem(val no: Int, val page: Int, val num: RectF, val type: String, val choices: List<RectF>, val answer: String, val solution: String, val area: RectF?)
+class OvProblem(val no: Int, val page: Int, val num: RectF, val type: String, val choices: List<RectF>, val answer: String, val solution: String, val area: RectF?, val sec: String = "")
 class QOverlay(val title: String, val subject: String, val problems: List<OvProblem>, val raw: JsonObject) {
     fun onPage(pi: Int) = problems.withIndex().filter { it.value.page == pi }
 }
@@ -45,14 +45,14 @@ object QOv {
             val p = e.jsonObject
             OvProblem(p["no"]?.jsonPrimitive?.intOrNull ?: (i + 1), p["page"]?.jsonPrimitive?.intOrNull ?: 0, rect(p["num"]) ?: RectF(),
                 p["type"]?.jsonPrimitive?.contentOrNull ?: "choice", (p["choices"] as? JsonArray)?.mapNotNull { rect(it) } ?: emptyList(),
-                p["answer"]?.jsonPrimitive?.contentOrNull ?: "", p["solution"]?.jsonPrimitive?.contentOrNull ?: "", rect(p["area"]))
+                p["answer"]?.jsonPrimitive?.contentOrNull ?: "", p["solution"]?.jsonPrimitive?.contentOrNull ?: "", rect(p["area"]), p["sec"]?.jsonPrimitive?.contentOrNull ?: "")
         }
         QOverlay(o["title"]?.jsonPrimitive?.contentOrNull ?: "", o["subject"]?.jsonPrimitive?.contentOrNull ?: "", ps, o)
     }.getOrNull()
 
     /** 정답 카드·채점이 그대로 쓰는 문제 목록 (보기 글 대신 ①②③…) */
     fun spec(ov: QOverlay): QuizSpec = QuizSpec(ov.title, ov.subject, ov.problems.mapIndexed { i, p ->
-        Problem(p.type, p.no, "p$i", "", "", p.choices.indices.map { QuizLayout.CIRC.getOrElse(it) { "${it + 1}" } }, p.answer, p.solution, 0.0, 0f, 0, null)
+        Problem(p.type, p.no, "p$i", p.sec, "", p.choices.indices.map { QuizLayout.CIRC.getOrElse(it) { "${it + 1}" } }, p.answer, p.solution, 0.0, 0f, 0, null)
     }, ov.raw)
 
     private fun RectF.grow(k: Float, minPad: Float = 0f): RectF { val dx = max(width() * k, minPad); val dy = max(height() * k, minPad); return RectF(left - dx, top - dy, right + dx, bottom + dy) }
