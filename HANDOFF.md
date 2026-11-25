@@ -272,3 +272,16 @@ Playwright(파이썬)로 800×1280, device_scale_factor 2 화면에서 확인해
 - 자: `DocView.setRuler`, 손가락으로 옮기기·돌리기, 펜이 가장자리 26dp 안에서 시작하면 가장자리로 투영
 - 설정 새 값: `glassPct`, `dock/dockX/dockY`, `scale`, `ruler`, `recent`(최근 색), `saved`(색 창 저장 색), `pressure`
 - 기기 없이 화면 확인: `./gradlew testDebugUnitTest --tests '*UiShotTest*'` → `app/build/shots/ui-*.png`
+
+### 12-1. 문제지 새 구조 .ybq 2 (2026-11-25)
+
+- `.ybq 2` = zip(`original.pdf` + `quiz.json`). 가져오면(`Nav.importYbq2`) 서재 항목은 `kind = "pdf"`, `ov = true`, `key = id`. 답안 정보는 `q/<id>.json`, 채점 상태는 `qs/<id>.json`(문제지와 같은 `QuizState`)
+- `quiz/Overlay.kt` `QOv`: 파싱, 정답 카드용 `QuizSpec` 만들기(보기 글 = ①②③…, `Problem.q` = 단원 이름), 꾹(번호 칸) / 톡(보기 칸) 판정, 보기 위 필기 읽기(감싸는 동그라미·칠함 = 고름, 긴 사선 = 지운 보기), 원본 위 표시(고른 보기, 정답 빨간 동그라미, ○ × △, 오답만 진하게)
+- 변환: `.claude/skills/pdf-to-ybq/scripts/make_v2.py` (+ `--section` 단원 정규식), 해설집에서 정답·해설은 `key_answers.py`. 확인한 예: 공통영어2 기말 C 실전연습 168쪽 496문항(패드 다운로드 폴더에 `공통영어2_기말_C_실전연습_원본그대로.ybq`)
+- 오답 모음에는 원본에서 그 문항 영역을 그림으로 잘라 넣음
+
+### 12-2. 남은 일
+
+- 페이지 보기 방식의 **가로로 넘기기**: 지금은 세로, 여러 쪽 한눈에만. `DocView.pageLeft()`가 쪽 번호를 받지 않아 가로 배치는 손이 많이 감
+- 막대를 왼쪽·오른쪽에 세로로 붙였을 때 아이콘(되돌리기, 숫자)도 같이 돌아감
+- 캔버스 댓글 스레드는 Claude에게 보내진 상태가 아니라서 Claude가 해결 표시를 못 함(사용자가 캔버스에서 직접 정리)
