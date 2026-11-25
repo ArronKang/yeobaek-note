@@ -6,3 +6,6 @@ local.properties
 .idea/
 *.iml
 captures/
+
+# Apple SF Pro (키트에서 뽑은 글꼴): 공개 저장소에 올리지 않음. 만드는 법은 tools/sfpro.md
+app/src/main/assets/sfpro.ttf

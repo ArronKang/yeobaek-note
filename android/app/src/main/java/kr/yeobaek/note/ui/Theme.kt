@@ -61,6 +61,33 @@ val Pretendard: FontFamily by lazy {
     FontFamily(f(400), f(500), f(600), f(700))
 }
 
+/**
+ * Apple 키트 글꼴: 라틴 글자·숫자·SF Symbols 아이콘은 SF Pro, 한글은 Pretendard (iOS가 SF Pro + 한글 글꼴을 섞는 것과 같은 방식).
+ * sfpro.ttf는 공개 저장소에 올리지 않아서, 없으면 Pretendard만 써요.
+ */
+object AppleFont {
+    val ok: Boolean by lazy { runCatching { Y.app.assets.open("sfpro.ttf").close(); true }.getOrDefault(false) }
+    private val sym = HashMap<Int, android.graphics.Typeface>()
+    private val text = HashMap<Int, android.graphics.Typeface>()
+    private val fam = HashMap<Int, FontFamily>()
+    private fun font(file: String, w: Int) = android.graphics.fonts.Font.Builder(Y.app.assets, file)
+        .setWeight(w.coerceIn(1, 1000)).setFontVariationSettings("'wght' $w").build()
+
+    /** SF Pro만 (아이콘 그리기용) */
+    fun sym(w: Int): android.graphics.Typeface? = if (!ok) null else sym.getOrPut(w) {
+        android.graphics.Typeface.CustomFallbackBuilder(android.graphics.fonts.FontFamily.Builder(font("sfpro.ttf", w)).build()).build()
+    }
+    /** SF Pro → Pretendard 순서로 글자마다 고르는 글꼴 */
+    fun text(w: Int): android.graphics.Typeface = text.getOrPut(w) {
+        val pret = android.graphics.fonts.FontFamily.Builder(font("pretendard.ttf", w.coerceIn(100, 900))).build()
+        if (!ok) android.graphics.Typeface.CustomFallbackBuilder(pret).setSystemFallback("sans-serif").build()
+        else android.graphics.Typeface.CustomFallbackBuilder(android.graphics.fonts.FontFamily.Builder(font("sfpro.ttf", w)).build())
+            .addCustomFallback(pret).setSystemFallback("sans-serif").build()
+    }
+    fun family(w: Int): FontFamily = fam.getOrPut(w) { FontFamily(androidx.compose.ui.text.font.Typeface(text(w))) }
+}
+
 fun txt(size: TextUnit = 15.sp, weight: Int = 400, color: Color = Color.Unspecified, ls: Float = 0f) =
-    TextStyle(fontFamily = Pretendard, fontSize = size, fontWeight = FontWeight(weight), color = color,
+    TextStyle(fontFamily = AppleFont.family(weight), fontSize = size, fontWeight = FontWeight(weight), color = color,
+        fontSynthesis = androidx.compose.ui.text.font.FontSynthesis.None,
         letterSpacing = if (ls != 0f) (ls * size.value).sp else TextUnit.Unspecified)

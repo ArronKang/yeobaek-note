@@ -80,6 +80,8 @@ private fun iconPath(name: String): Path = pathCache.getOrPut(name) { PathParser
 @Composable
 fun Ic(name: String, modifier: Modifier = Modifier, size: Dp = 24.dp, color: Color = T.ink2, stroke: Float = 1.75f, fill: Boolean = false) {
     Canvas(modifier.size(size)) {
+        // Apple SF Symbols가 있으면 그것으로 (굵기: 선 두께 1.75 → 보통, 2 이상 → 중간)
+        if (Sym.draw(this, if (fill && Sym.map.containsKey(name + "fill")) name + "fill" else name, color, if (stroke >= 2f) 510 else 400)) return@Canvas
         val k = this.size.width / 24f
         scale(k, k, Offset.Zero) {
             val p = iconPath(name)
