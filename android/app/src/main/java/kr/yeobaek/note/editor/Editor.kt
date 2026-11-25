@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -131,6 +132,14 @@ class Ed {
     var chromeH by mutableFloatStateOf(0f)
     /** 화면 분할: 오른쪽(세로 화면이면 아래) 문서 */
     var split by mutableStateOf<Doc?>(null)
+    /** 자를 화면에 꺼냄 */
+    var ruler by mutableStateOf(false)
+    /** 펜 막대를 끄는 중: 떼어 낸 위치(px, 화면 기준) */
+    var pkFloat by mutableStateOf<androidx.compose.ui.geometry.Offset?>(null)
+    /** 편집 화면 크기(px) */
+    var screen = androidx.compose.ui.geometry.Size.Zero
+    /** 페이지 보기 방식: 여러 쪽 한눈에 */
+    var overview by mutableStateOf(false)
     var ratio by mutableFloatStateOf(.5f)
     var left: DocView? = null
     var right: DocView? = null
@@ -222,7 +231,7 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
     SplitCtl.start = { d2 -> ed.split?.let { endSplit() }; ed.split = d2; Nav.splitDoc = d2; ed.ratio = .5f; Y.haptic(10) }
     SplitCtl.end = { endSplit() }
 
-    Box(Modifier.fillMaxSize().background(Color(Paper.c().desk))) {
+    Box(Modifier.fillMaxSize().background(Color(Paper.c().desk)).onSizeChanged { ed.screen = androidx.compose.ui.geometry.Size(it.width.toFloat(), it.height.toFloat()) }) {
         val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         val topPad = (if (ed.collapsed) with(d) { statusTop.toPx() } else ed.chromeH) + with(d) { 32.dp.toPx() }
         val leftPane = @Composable { m: Modifier ->
@@ -287,11 +296,17 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
         // 글상자 고치기
         ed.edit?.let { TextEditor(ed, it) }
 
-        // 페이지 칩
-        ed.view?.let { PageChip(ed, it.doc) }
+        // 페이지 칩 (위쪽 페이지 눈금을 끈 경우만)
+        if (!Y.settings.scale) ed.view?.let { PageChip(ed, it.doc) }
 
-        // 상단 유리판
+        // 여러 쪽 한눈에
+        if (ed.overview) ed.view?.let { Overview(ed, it) }
+
+        // 상단: 탭 + 모드 + 펜 막대 + 페이지 눈금
         Chrome(ed, open, statusTop, onExport)
+
+        // 떼어 낸 펜 막대
+        FloatingPicker(ed)
 
         if (Nav.busy) Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { } })
     }
@@ -299,7 +314,7 @@ fun EditorScreen(open: OpenDoc, onExport: (Doc, DocView) -> Unit) {
 
 private fun hitAct(c: Card, x: Float, y: Float): String? = c.acts.entries.firstOrNull { it.value.contains(androidx.compose.ui.geometry.Offset(x, y)) }?.key
 private fun setHot(c: Card, x: Float, y: Float) { val h = hitAct(c, x, y); if (h != c.hot) { c.hot = h; if (h != null) Y.haptic(6) } }
-private fun act(ed: Ed, c: Card, v: String) {
+internal fun act(ed: Ed, c: Card, v: String) {
     Quiz.setGrade(c.v.doc, c.idx, v)
     if (v != "clear") c.v.animate(c.idx, listOf("mark"))
     c.v.quizRepaint(); ed.card = null; c.v.setCard(-1, -1); ed.rev++
@@ -308,197 +323,8 @@ private fun act(ed: Ed, c: Card, v: String) {
 /** 도구 막대 유리판 색: 설정의 투명도 */
 @Composable fun glassColor(): Color { Y.setRev; return T.glass.copy(alpha = when (Y.settings.glass) { "clear" -> .45f; "solid" -> 1f; else -> .72f }) }
 
-/* =============== 상단 =============== */
-@Composable
-private fun Chrome(ed: Ed, open: OpenDoc, statusTop: androidx.compose.ui.unit.Dp, onExport: (Doc, DocView) -> Unit) {
-    val d = LocalDensity.current
-    val doc = ed.view?.doc ?: open.doc
-    val hide = remember { Animatable(0f) }
-    var drag by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(ed.collapsed) { hide.animateTo(if (ed.collapsed) 1f else 0f, tween(380, easing = Out)) }
-    var h by remember { mutableFloatStateOf(0f) }
-    val glass = Modifier.shadow(12.dp, RoundedCornerShape(18.dp), ambientColor = Color(0x1A212529), spotColor = Color(0x1A212529))
-        .background(glassColor(), RoundedCornerShape(18.dp)).border(.5.dp, T.glassEdge, RoundedCornerShape(18.dp))
-
-    // 블라인드처럼: 빈 곳을 잡고 위로 끌면 숨음
-    Column(Modifier.fillMaxWidth().padding(top = statusTop + 8.dp, start = 8.dp, end = 8.dp)
-        .onSizeChanged { h = it.height.toFloat(); ed.chromeH = it.height + with(d) { (statusTop + 8.dp).toPx() } }
-        .graphicsLayer { translationY = -hide.value * (h + with(d) { (statusTop + 24.dp).toPx() }) + drag }
-        .then(glass)
-        .pointerInput(Unit) {
-            detectVerticalDragGestures(
-                onDragEnd = { if (drag < -36.dp.toPx()) { ed.collapsed = true; Y.haptic(8) }; drag = 0f },
-                onDragCancel = { drag = 0f },
-            ) { _, dy -> val nd = drag + dy; drag = if (nd < 0) nd else nd * .25f }
-        }
-    ) {
-        var title by remember(open, doc) { mutableStateOf(doc.title) }
-        // 0줄: 크롬 같은 탭 줄
-        TabStrip(title)
-        Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
-        // 1줄: 뒤로, 제목, 공유, ⋯
-        Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconBtn("back", "라이브러리") { Nav.closeEditor() }
-            Spacer(Modifier.width(6.dp))
-            BasicText(Y.clean(title).ifBlank { "제목 없음" }, Modifier.weight(1f),
-                style = txt(15.sp, 600, T.snow).copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.width(6.dp))
-            IconBtn("share", "내보내기") { ed.view?.let { v -> v.saveNow(); onExport(doc, v) } }
-            IconBtn("more", "더보기") { r -> moreMenu(ed, r) { renameModal(title) { t -> title = t; doc.title = t; ed.view?.queueSave(); ed.view?.saveNow() } } }
-        }
-        // 2줄: 탭, 도구, 펜
-        Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-            listOf("home" to ("home" to "홈"), "draw" to ("draw" to "필기"), "view" to ("eye" to "보기")).forEach { (id, p) ->
-                IconBtn(p.first, p.second, size = 40.dp, pressed = ed.tab == id) {
-                    if (ed.tab != id) { ed.tab = id; Overlay.closePop(); Y.haptic(8); if (id != "draw" && Y.mode == "lasso") ed.view?.clearSel() }
-                }
-            }
-            Box(Modifier.padding(horizontal = 6.dp).size(.5.dp, 22.dp).background(T.hair))
-            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                ed.rev; Y.penRev; Y.setRev
-                Tools(ed, doc)
-            }
-            if (ed.tab == "draw") Tray(ed)
-        }
-        }
-    }
-    // 숨겼을 때: 오른쪽 위 작은 유리 ⋯ (누르거나 아래로 끌면 내려옴)
-    if (hide.value > .5f) {
-        var dy by remember { mutableFloatStateOf(0f) }
-        Box(Modifier.fillMaxWidth().padding(top = statusTop + 10.dp, end = 12.dp), contentAlignment = Alignment.TopEnd) {
-            Box(Modifier.offset { IntOffset(0, dy.roundToInt()) }.size(40.dp)
-                .shadow(8.dp, CircleShape).background(glassColor(), CircleShape).border(.5.dp, T.glassEdge, CircleShape)
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures(onDragEnd = { if (dy > 30.dp.toPx()) { ed.collapsed = false; Y.haptic(8) }; dy = 0f }) { _, a -> dy = (dy + a).coerceIn(0f, 80.dp.toPx()) }
-                }
-                .pointerInput(Unit) { detectTapGestures { ed.collapsed = false; Y.haptic(8) } },
-                contentAlignment = Alignment.Center) { Ic("more", size = 20.dp, color = T.snow) }
-        }
-    }
-}
-
-/* =============== 크롬 같은 탭 줄 =============== */
-// 맨 위 어두운 띠에 탭이 나란히, 고른 탭은 아래 도구 막대와 한 장으로 이어짐(밑동이 살짝 벌어짐)
-@Composable
-private fun TabStrip(curTitle: String) {
-    val d = LocalDensity.current
-    val scope = rememberCoroutineScope()
-    val dark = Y.isDark()
-    val band = if (dark) Color.Black.copy(alpha = .24f) else Color(0x14212529)
-    val stripH = 42.dp
-    val tabH = 34.dp
-    val padS = 8.dp
-    val plusW = 40.dp
-    val slide = remember { HashMap<OpenDoc, Animatable<Float, androidx.compose.animation.core.AnimationVector1D>>() }
-    var dragging by remember { mutableStateOf<OpenDoc?>(null) }
-    val dx = remember { Animatable(0f) }
-    val dy = remember { Animatable(0f) }
-    val tearPx = with(d) { 40.dp.toPx() }
-    val scroll = rememberScrollState()
-    BoxWithConstraints(Modifier.fillMaxWidth().height(stripH)) {
-        val n = Nav.tabs.size.coerceAtLeast(1)
-        val tabW = ((maxWidth - padS * 2 - plusW) / n).coerceIn(104.dp, 232.dp)
-        val wPx = with(d) { tabW.toPx() }
-        val startPx = with(d) { padS.toPx() }
-        fun offOf(t: OpenDoc) = if (dragging === t) dx.value else slide[t]?.value ?: 0f
-        Box(Modifier.fillMaxSize()
-            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-            .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
-            .drawBehind {
-                drawRect(band)
-                // 고른 탭 자리만 띠를 지워 아래 유리와 이어지게
-                val cur = Nav.cur ?: return@drawBehind
-                val i = Nav.tabs.indexOf(cur); if (i < 0) return@drawBehind
-                if (dragging === cur && dy.value > 1f) return@drawBehind
-                val x = startPx + i * wPx + offOf(cur) - scroll.value
-                val top = size.height - tabH.toPx(); val h = size.height
-                val rr = 10.dp.toPx(); val r = 8.dp.toPx(); val w = wPx
-                val p = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(x - r, h); quadraticTo(x, h, x, h - r)
-                    lineTo(x, top + rr); quadraticTo(x, top, x + rr, top)
-                    lineTo(x + w - rr, top); quadraticTo(x + w, top, x + w, top + rr)
-                    lineTo(x + w, h - r); quadraticTo(x + w, h, x + w + r, h); close()
-                }
-                drawPath(p, Color.Black, blendMode = androidx.compose.ui.graphics.BlendMode.Clear)
-            }
-        )
-        Row(Modifier.fillMaxSize().horizontalScroll(scroll).padding(start = padS), verticalAlignment = Alignment.Bottom) {
-            Nav.tabs.forEachIndexed { idx, t ->
-                androidx.compose.runtime.key(t) {
-                    val on = Nav.cur === t
-                    val me = dragging === t
-                    val sl = slide.getOrPut(t) { Animatable(0f) }
-                    val nextOn = Nav.tabs.getOrNull(idx + 1)?.let { Nav.cur === it } == true
-                    val lifted = me && dy.value > 1f
-                    Box(Modifier.width(tabW).height(tabH)
-                        .zIndex(if (me) 2f else if (on) 1f else 0f)
-                        .graphicsLayer {
-                            translationX = if (me) dx.value else sl.value
-                            translationY = if (me) dy.value else 0f
-                            alpha = if (me) 1f - (dy.value / (tearPx * 2.2f)).coerceIn(0f, .6f) else 1f
-                        }
-                        .then(if (lifted) Modifier.shadow(10.dp, RoundedCornerShape(10.dp)).background(glassColor(), RoundedCornerShape(10.dp)) else Modifier)
-                        .pointerInput(t) { detectTapGestures(onTap = { Nav.switchTo(t) }) }
-                        // 옆으로 끌면 자리 바꾸기, 아래로 뜯어내면 닫기
-                        .pointerInput(t) {
-                            detectDragGestures(
-                                onDragStart = { dragging = t; scope.launch { dx.snapTo(0f); dy.snapTo(0f) }; Y.haptic(8) },
-                                onDragEnd = {
-                                    if (dy.value > tearPx) { Y.haptic(12); dragging = null; Nav.closeTab(t); scope.launch { dx.snapTo(0f); dy.snapTo(0f) } }
-                                    else scope.launch {
-                                        launch { dy.animateTo(0f, androidx.compose.animation.core.spring(.7f, 500f)) }
-                                        dx.animateTo(0f, androidx.compose.animation.core.spring(.75f, 500f)); if (dragging === t) dragging = null
-                                    }
-                                },
-                                onDragCancel = { scope.launch { launch { dy.animateTo(0f) }; dx.animateTo(0f); dragging = null } },
-                            ) { ch, a ->
-                                ch.consume()
-                                scope.launch {
-                                    dy.snapTo((dy.value + a.y).let { if (it < 0) it * .2f else it })
-                                    var x = dx.value + a.x
-                                    val i = Nav.tabs.indexOf(t)
-                                    if (x > wPx / 2f && i < Nav.tabs.size - 1) {
-                                        val o = Nav.tabs[i + 1]; Nav.tabs.removeAt(i); Nav.tabs.add(i + 1, t); x -= wPx; Y.haptic(6)
-                                        val a2 = slide.getOrPut(o) { Animatable(0f) }; launch { a2.snapTo(wPx); a2.animateTo(0f, tween(240, easing = Out)) }
-                                    } else if (x < -wPx / 2f && i > 0) {
-                                        val o = Nav.tabs[i - 1]; Nav.tabs.removeAt(i); Nav.tabs.add(i - 1, t); x += wPx; Y.haptic(6)
-                                        val a2 = slide.getOrPut(o) { Animatable(0f) }; launch { a2.snapTo(-wPx); a2.animateTo(0f, tween(240, easing = Out)) }
-                                    }
-                                    dx.snapTo(x)
-                                }
-                            }
-                        }) {
-                        Row(Modifier.fillMaxSize().padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            val icon = when (t.doc.type) { "pdf" -> "pdf"; "quiz" -> "quiz"; else -> "notes" }
-                            Ic(icon, size = 15.dp, color = if (on) T.snow else T.ink2)
-                            Spacer(Modifier.width(8.dp))
-                            BasicText(Y.clean(if (on) curTitle else t.doc.title).ifBlank { "제목 없음" }, Modifier.weight(1f),
-                                style = txt(12.5.sp, if (on) 600 else 500, if (on) T.snow else T.ink2), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Box(Modifier.size(26.dp).clip(CircleShape).pointerInput(t) { detectTapGestures { Y.haptic(8); Nav.closeTab(t) } },
-                                contentAlignment = Alignment.Center) { Ic("close", size = 13.dp, color = T.ink2, stroke = 2f) }
-                        }
-                        // 고르지 않은 탭 사이 가는 칸막이
-                        if (!on && !nextOn && !me) Box(Modifier.align(Alignment.CenterEnd).size(1.dp, 16.dp).background(T.hair))
-                    }
-                }
-            }
-            Box(Modifier.height(tabH), contentAlignment = Alignment.Center) {
-                IconBtn("plus", "새 노트", size = 32.dp, iconSize = 17.dp) { kr.yeobaek.note.library.newNoteModal() }
-            }
-        }
-    }
-}
-
-private fun moreMenu(ed: Ed, r: Rect, onRename: () -> Unit) {
-    Overlay.popover("more", r, 220.dp, "right") {
-        PItem("이름 바꾸기", "text") { Overlay.closePop(); onRename() }
-        PItem("도구 막대 숨기기", "collapse") { Overlay.closePop(); ed.collapsed = true }
-        PItem("다크 모드", "moon", on = Y.isDark()) { Overlay.closePop(); toggleDark(ed) }
-        PItem("설정", "settings") { Overlay.closePop(); kr.yeobaek.note.settings.openSettings() }
-    }
-}
 /** 문서 이름 바꾸기 창 */
-private fun renameModal(cur: String, done: (String) -> Unit) {
+internal fun renameModal(cur: String, done: (String) -> Unit) {
     Overlay.modal(width = 420.dp) { close ->
         var v by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(cur, androidx.compose.ui.text.TextRange(0, cur.length))) }
         val fr = remember { androidx.compose.ui.focus.FocusRequester() }
@@ -517,105 +343,10 @@ private fun renameModal(cur: String, done: (String) -> Unit) {
     }
 }
 
-private fun toggleDark(ed: Ed) { Y.settings.dark = if (Y.isDark()) "off" else "on"; Y.saveSettings(); QuizLayout.clearCache(); ed.left?.themeChanged(); ed.right?.themeChanged(); Y.haptic(8) }
-
-@Composable private fun Sep() = Box(Modifier.padding(horizontal = 4.dp).size(.5.dp, 22.dp).background(T.hair))
-
-/* =============== 도구줄 =============== */
-@Composable
-private fun Tools(ed: Ed, doc: Doc) {
-    ed.rev; Y.mode; Y.setRev   // 기록·선택·모드가 바뀌면 다시 그림
-    val v = ed.view ?: return
-    fun setMode(m: String) { if (Y.mode == "lasso" && m != "lasso") v.clearSel(); Y.mode = m; Overlay.closePop(); ed.rev++ }
-    when (ed.tab) {
-        "draw" -> {
-            IconBtn("undo", "실행취소", enabled = v.canUndo) { v.undo() }
-            IconBtn("redo", "다시실행", enabled = v.canRedo) { v.redo() }
-            Sep()
-            IconBtn("text", "텍스트", pressed = Y.mode == "text") { setMode(if (Y.mode == "text") "pen" else "text") }
-            IconBtn("lasso", "올가미 선택", pressed = Y.mode == "lasso") { setMode(if (Y.mode == "lasso") "pen" else "lasso") }
-            IconBtn("space", "공간 삽입", pressed = Y.mode == "space") { setMode(if (Y.mode == "space") "pen" else "space") }
-            Sep()
-            IconBtn(if (Y.settings.finger) "finger" else "hand", if (Y.settings.finger) "손가락: 필기" else "손가락: 이동", pressed = Y.settings.finger) {
-                Y.settings.finger = !Y.settings.finger; Y.saveSettings()
-            }
-            if (v.sel != null) {
-                Sep()
-                IconBtn("copy", "복사") { v.copySel() }
-                IconBtn("palette", "색 변경") { r ->
-                    Overlay.popover("recolor", r, 250.dp) {
-                        PTitle("색")
-                        Row(Modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Y.PEN_COLORS.forEach { c -> Dot(Color(Ink.parse(c)), false) { v.recolorSel(c); Overlay.closePop() } }
-                        }
-                    }
-                }
-                IconBtn("trash", "삭제", color = T.danger) { v.deleteSel() }
-            }
-        }
-        "home" -> {
-            IconBtn("library", "라이브러리") { Nav.closeEditor() }
-            IconBtn("sidebar", "페이지 사이드바", pressed = ed.sidebar) { ed.sidebar = !ed.sidebar }
-            when (doc.type) {
-                "quiz" -> {
-                    Sep()
-                    IconBtn("check", "전체 채점") {
-                        val (n, sc) = Quiz.gradeAll(doc)
-                        v.quizRepaint(); v.animateScore()
-                        doc.quiz!!.problems.indices.forEach { if (doc.qs!!.grade["$it"] != null) v.animate(it, listOf("mark")) }
-                        if (n == 0 && sc.graded == 0) Overlay.toast("고른 보기가 없어요") else Overlay.toast("${sc.right} / ${sc.total}", ms = 2200)
-                        ed.rev++
-                    }
-                    IconBtn("answer", "정답표") { r -> answerSheet(r, doc, v) }
-                    IconBtn("focus", "틀린 문제만 보기", pressed = doc.qs!!.focus) { Quiz.setFocus(doc, null); v.quizRepaint(); ed.rev++ }
-                    IconBtn("retry", "틀린 문제로 새 문제지") {
-                        Nav.busy = true
-                        Nav.scope.launch {
-                            val meta = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { Quiz.retry(doc) }
-                            Nav.busy = false
-                            if (meta == null) Overlay.toast("틀린 문제가 없어요") else { Nav.closeEditor(); delay(250); Nav.open(meta) }
-                        }
-                    }
-                    IconBtn("reset", "처음 상태로") {
-                        Overlay.confirm("문제지를 처음 상태로 돌릴까요?", "초기화", danger = true) { ok -> if (ok) { Quiz.reset(doc); ed.card = null; v.quizRepaint(); ed.rev++ } }
-                    }
-                }
-                "note" -> {
-                    IconBtn("pageplus", "새 페이지") { v.addPage() }
-                    IconBtn("template", "템플릿 변경") { r -> tplPop(r, v, v.pageIdx) { ed.rev++ } }
-                }
-                else -> {
-                    IconBtn("list", "목차") { r -> tocPop(r, doc, v) }
-                    val has = ed.page in doc.bookmarks
-                    IconBtn("bookmark", "북마크", pressed = has) { if (has) doc.bookmarks.remove(ed.page) else doc.bookmarks.add(ed.page); ed.rev++ }
-                    if (doc.pdf?.canSearch == true) { Sep(); SearchBox(ed, v) }
-                }
-            }
-        }
-        else -> {
-            val z = v.zoom
-            IconBtn("fit", "맞춤", pressed = z == "fit") { v.setZoom("fit"); ed.rev++ }
-            IconBtn("width", "너비", pressed = z == "width") { v.setZoom("width"); ed.rev++ }
-            Sep()
-            IconBtn("minus", "축소") { v.setZoom(max(0.4f, v.zoomRel() - 0.25f)); ed.rev++ }
-            IconBtn("plus", "확대") { v.setZoom(min(3f, v.zoomRel() + 0.25f)); ed.rev++ }
-            Sep()
-            IconBtn("paper", "종이 색") { r ->
-                Overlay.popover("paper", r, 180.dp, "left") {
-                    PTitle("종이 색")
-                    listOf("white" to "흰색", "gray" to "연회색").forEach { (id, n) ->
-                        PItem(n, on = Y.settings.paper == id) { Y.settings.paper = id; Y.saveSettings(); v.themeChanged(); Overlay.closePop() }
-                    }
-                }
-            }
-            IconBtn("split", "분할 보기", pressed = ed.split != null) { r -> if (ed.split != null) SplitCtl.end() else splitPicker(r, v.doc) }
-            IconBtn("moon", "다크 모드", pressed = Y.isDark()) { toggleDark(ed) }
-        }
-    }
-}
+internal fun toggleDark(ed: Ed) { Y.settings.dark = if (Y.isDark()) "off" else "on"; Y.saveSettings(); QuizLayout.clearCache(); ed.left?.themeChanged(); ed.right?.themeChanged(); Y.haptic(8) }
 
 @Composable
-private fun SearchBox(ed: Ed, v: DocView) {
+internal fun SearchBox(ed: Ed, v: DocView) {
     var q by remember { mutableStateOf(v.search?.q ?: "") }
     var count by remember { mutableStateOf("") }
     fun upd() { val s = v.search; count = if (s == null) "" else if (s.list.isNotEmpty()) "${s.cur + 1} / ${s.list.size}" else if (s.done) "0" else "…" }
@@ -634,14 +365,14 @@ private fun SearchBox(ed: Ed, v: DocView) {
     }
 }
 
-private fun tplPop(r: Rect, v: DocView, i: Int, after: () -> Unit) {
+internal fun tplPop(r: Rect, v: DocView, i: Int, after: () -> Unit) {
     Overlay.popover("tpl$i", r, 220.dp, "left") {
         PTitle("템플릿")
         Y.TEMPLATES.forEach { (id, n) -> PItem(n, on = v.doc.pages.getOrNull(i)?.tpl == id) { v.setTemplateUndoable(i, id); Overlay.closePop(); after() } }
     }
 }
 
-private fun tocPop(r: Rect, doc: Doc, v: DocView) {
+internal fun tocPop(r: Rect, doc: Doc, v: DocView) {
     Overlay.popover("toc", r, 300.dp, "left") {
         PTitle("목차")
         val bms = doc.bookmarks.sorted()
@@ -652,7 +383,7 @@ private fun tocPop(r: Rect, doc: Doc, v: DocView) {
     }
 }
 
-private fun answerSheet(r: Rect, doc: Doc, v: DocView) {
+internal fun answerSheet(r: Rect, doc: Doc, v: DocView) {
     Overlay.popover("sheet", r, 300.dp) {
         PTitle("정답표")
         val ps = doc.quiz!!.problems.withIndex().filter { !it.value.isPassage }
@@ -681,130 +412,6 @@ private fun answerSheet(r: Rect, doc: Doc, v: DocView) {
     }
 }
 
-/* =============== 펜 트레이 =============== */
-@Composable
-private fun Tray(ed: Ed) {
-    Y.penRev; ed.rev
-    val n = Y.settings.trayCount.coerceIn(3, 8)
-    val pens = Y.pens.take(n)
-    if (Y.penIdx >= pens.size) Y.penIdx = 0
-    Row(Modifier.height(44.dp), verticalAlignment = Alignment.CenterVertically) {
-        pens.forEachIndexed { i, p ->
-            val sel = Y.mode == "pen" && Y.penIdx == i
-            PenSlot(p.kind, p.color, p.type, sel, if (p.kind == "hl") "형광펜 ${i + 1}" else "펜 ${i + 1}") { r ->
-                val same = sel
-                Y.penIdx = i; Y.haptic(8)
-                if (Y.mode != "pen") { if (Y.mode == "lasso") ed.view?.clearSel(); Y.mode = "pen" }
-                if (same) penPop(r, i, ed) else Overlay.closePop()
-                ed.rev++
-            }
-        }
-        PenSlot("eraser", null, null, Y.mode == "eraser", "지우개") { r ->
-            Y.haptic(8)
-            if (Y.mode != "eraser") { if (Y.mode == "lasso") ed.view?.clearSel(); Y.mode = "eraser"; Overlay.closePop() } else eraserPop(r)
-            ed.rev++
-        }
-        IconBtn("plus", "펜 추가", size = 36.dp, iconSize = 20.dp) {
-            if (Y.pens.size >= n) { Overlay.toast("펜 칸이 가득 찼어요"); return@IconBtn }
-            Y.pens.add(kr.yeobaek.note.data.Pen("pen", "ball", Y.PEN_COLORS[Y.pens.size % 6], 0.8f, 1f))
-            Y.penIdx = Y.pens.size - 1; Y.mode = "pen"; Y.savePens(); ed.rev++
-        }
-    }
-}
-
-/** 고른 펜만 펜꽂이에서 뽑힌 듯 올라옴 */
-@Composable
-private fun PenSlot(kind: String, color: String?, type: String?, sel: Boolean, label: String, onClick: (Rect) -> Unit) {
-    val lift by animateFloatAsState(if (sel) 1f else 0f, tween(380, easing = Spring), label = "pen")
-    var bounds by remember { mutableStateOf(Rect.Zero) }
-    Box(Modifier.size(38.dp, 44.dp).onGloballyPositioned { bounds = it.boundsInRoot() }
-        .pointerInput(kind, color, type, label) {
-            detectTapGestures(onLongPress = { Overlay.tip = kr.yeobaek.note.ui.TipSpec(System.nanoTime(), label, bounds) }, onTap = { onClick(bounds) })
-        }, contentAlignment = Alignment.Center) {
-        PenArt(kind, color, type, 32.dp, Modifier.graphicsLayer { translationY = (2f - 6f * lift).dp.toPx(); val s = 1f + .06f * lift; scaleX = s; scaleY = s })
-    }
-}
-
-private fun penPop(r: Rect, i: Int, ed: Ed) {
-    Overlay.popover("pen$i", r, 320.dp, "right") {
-        Y.penRev
-        val pen = Y.pens[i]
-        // 펜 모양 (만년필·볼펜·세필·붓 타일)
-        if (pen.kind == "pen") Row(Modifier.fillMaxWidth().padding(4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Y.PEN_TYPES.forEach { (id, name) ->
-                val on = pen.type == id
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).pointerInput(id) { detectTapGestures { pen.type = id; Y.savePens(); ed.rev++ } }.padding(4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(if (on) T.fill2 else T.fill), contentAlignment = Alignment.Center) { PenArt("pen", pen.color, id, 34.dp) }
-                    Spacer(Modifier.height(4.dp))
-                    BasicText(name, style = txt(12.sp, if (on) 600 else 400, if (on) T.snow else T.ink2))
-                }
-            }
-        }
-        // 미리보기
-        androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().padding(4.dp).height(56.dp).clip(RoundedCornerShape(12.dp)).background(Color.White)) {
-            val w = size.width; val hh = size.height
-            val pts = (0..90).map { k -> val t = k / 90f; floatArrayOf(0.06f + t * 0.88f, (hh / 2 + kotlin.math.sin(t * Math.PI * 2.2).toFloat() * hh * .22f + kotlin.math.cos(t * 9.0).toFloat() * 3f) / w, 0.25f + 0.6f * kotlin.math.sin(t * Math.PI).toFloat()) }
-            val st = kr.yeobaek.note.data.Stroke(pen.kind, pen.color, pen.mm / 90f, if (pen.kind == "hl") pen.alpha else 1f, if (pen.kind == "pen") pen.type?.takeIf { it != "ball" } else null, pts.toMutableList())
-            drawContext.canvas.nativeCanvas.let { Ink.draw(it, st, w, false) }
-        }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Slider(pen.mm, .3f, 12f, Modifier.weight(1f)) { pen.mm = (it * 10).roundToInt() / 10f; Y.savePens() }
-            BasicText("%.1fmm".format(pen.mm), Modifier.width(56.dp), style = txt(13.sp, 500, T.ink2).copy(textAlign = androidx.compose.ui.text.style.TextAlign.End))
-        }
-        // 색
-        Row(Modifier.fillMaxWidth().padding(4.dp).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-            Y.PEN_COLORS.forEach { c -> Dot(Color(Ink.parse(c)), pen.kind == "pen" && pen.color == c) { if (pen.kind != "pen") { pen.kind = "pen"; pen.mm = 1f; pen.alpha = 1f; if (pen.type == null) pen.type = "ball" }; pen.color = c; Y.savePens(); ed.rev++ } }
-            Box(Modifier.padding(horizontal = 4.dp).size(.5.dp, 20.dp).background(T.hair))
-            Y.HL_COLORS.forEach { c -> Dot(Color(Ink.parse(c)), pen.kind == "hl" && pen.color == c) { if (pen.kind != "hl") { pen.kind = "hl"; pen.mm = 6f; pen.alpha = .4f }; pen.color = c; Y.savePens(); ed.rev++ } }
-        }
-        if (pen.kind == "hl") Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            BasicText("투명도", style = txt(13.sp, 400, T.ink2)); Spacer(Modifier.width(8.dp))
-            Slider(pen.alpha, .1f, 1f, Modifier.weight(1f)) { pen.alpha = (it * 20).roundToInt() / 20f; Y.savePens() }
-            BasicText("${(pen.alpha * 100).roundToInt()}%", Modifier.width(48.dp), style = txt(13.sp, 500, T.ink2).copy(textAlign = androidx.compose.ui.text.style.TextAlign.End))
-        }
-    }
-}
-
-private fun eraserPop(r: Rect) {
-    Overlay.popover("eraser", r, 280.dp, "right") {
-        Y.penRev
-        val e = Y.eraser
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            BasicText("크기", style = txt(13.sp, 400, T.ink2)); Spacer(Modifier.width(8.dp))
-            Slider(e.mm, 1f, 20f, Modifier.weight(1f)) { e.mm = (it * 2).roundToInt() / 2f; Y.savePens() }
-            BasicText("%.1fmm".format(e.mm), Modifier.width(56.dp), style = txt(13.sp, 500, T.ink2).copy(textAlign = androidx.compose.ui.text.style.TextAlign.End))
-        }
-        Box(Modifier.padding(8.dp)) { Seg(e.partial, listOf(false to "획 지우기", true to "부분 지우기")) { e.partial = it; Y.savePens() } }
-    }
-}
-
-/** 단순한 슬라이더: 가는 선 + 동그란 손잡이 */
-@Composable
-fun Slider(value: Float, min: Float, max: Float, modifier: Modifier = Modifier, onChange: (Float) -> Unit) {
-    var w by remember { mutableFloatStateOf(1f) }
-    val k = ((value - min) / (max - min)).coerceIn(0f, 1f)
-    val acc = T.acc; val track = T.fill2
-    Box(modifier.height(36.dp).onSizeChanged { w = it.width.toFloat() }
-        .pointerInput(min, max) {
-            awaitPointerEventScope {
-                while (true) {
-                    val e = awaitPointerEvent()
-                    val ch = e.changes.firstOrNull() ?: continue
-                    if (ch.pressed) { onChange(min + (ch.position.x / w).coerceIn(0f, 1f) * (max - min)); ch.consume() }
-                }
-            }
-        }) {
-        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-            val y = size.height / 2; val r = 9.dp.toPx(); val x = r + (size.width - 2 * r) * k
-            drawLine(track, androidx.compose.ui.geometry.Offset(r, y), androidx.compose.ui.geometry.Offset(size.width - r, y), 3.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-            drawLine(acc, androidx.compose.ui.geometry.Offset(r, y), androidx.compose.ui.geometry.Offset(x, y), 3.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-            drawCircle(Color.White, r, androidx.compose.ui.geometry.Offset(x, y))
-            drawCircle(Color(0x33212529), r, androidx.compose.ui.geometry.Offset(x, y), style = androidx.compose.ui.graphics.drawscope.Stroke(.5.dp.toPx()))
-        }
-    }
-}
-
 /* =============== 페이지 칩 =============== */
 @Composable
 private fun PageChip(ed: Ed, doc: Doc) {
@@ -817,6 +424,38 @@ private fun PageChip(ed: Ed, doc: Doc) {
         Box(Modifier.graphicsLayer { alpha = if (ed.pulling) 0f else a.value; translationY = (1 - a.value) * 10.dp.toPx() }
             .background(T.floatBg.copy(alpha = .92f), CircleShape).padding(horizontal = 14.dp, vertical = 6.dp)) {
             BasicText("${ed.page + 1} / ${doc.pages.size}", style = txt(12.sp, 500, T.floatFg))
+        }
+    }
+}
+
+/* =============== 여러 쪽 한눈에 (페이지 보기 방식) =============== */
+@Composable
+private fun Overview(ed: Ed, v: DocView) {
+    ed.rev
+    val d = LocalDensity.current
+    val doc = v.doc
+    val top = with(d) { ed.chromeH.toDp() } + 12.dp
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { a.animateTo(1f, tween(320, easing = Out)) }
+    Box(Modifier.fillMaxSize().graphicsLayer { alpha = a.value }.background(Color(Paper.c().desk)).pointerInput(Unit) { detectTapGestures { } }) {
+        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+            androidx.compose.foundation.lazy.grid.GridCells.Adaptive(180.dp),
+            Modifier.fillMaxSize().padding(top = top),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            items(doc.pages.size) { i ->
+                val pg = doc.pages[i]
+                val wpx = with(d) { 180.dp.roundToPx() }
+                val bm = remember(pg, v.verOf(pg), Y.setRev, i) { runCatching { v.thumb(i, wpx) }.getOrNull() }
+                Column(Modifier.pointerInput(i) { detectTapGestures { ed.overview = false; v.scrollToPage(i, smooth = false) } }, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.fillMaxWidth().aspectRatio(1f / pg.ratio).shadow(4.dp, RoundedCornerShape(6.dp))
+                        .border(if (ed.page == i) 2.5.dp else .5.dp, if (ed.page == i) Color(0xFF0088FF) else T.hair, RoundedCornerShape(6.dp)).clip(RoundedCornerShape(6.dp)).background(Color.White)) {
+                        bm?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize()) }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    BasicText("${i + 1}", style = txt(13.sp, if (ed.page == i) 700 else 500, if (ed.page == i) Color(0xFF0088FF) else T.ink2))
+                }
+            }
         }
     }
 }
@@ -994,7 +633,7 @@ object SplitCtl {
 }
 
 /** 옆에 열 문서 고르기: 새 노트, 또는 서재의 노트·PDF·문제지 */
-private fun splitPicker(r: Rect, cur: Doc) {
+internal fun splitPicker(r: Rect, cur: Doc) {
     Overlay.popover("split", r, 280.dp, "right") {
         PTitle("옆에 열기")
         PItem("새 노트", "compose") {

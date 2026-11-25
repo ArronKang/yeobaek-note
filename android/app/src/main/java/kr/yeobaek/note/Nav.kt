@@ -65,6 +65,29 @@ object Nav {
 
     fun closeEditor() { Overlay.closePop(); inEditor = false; Y.libRev++ }
 
+    /** 열린 문서를 서재에 한 벌 더 (노트·문제지는 필기까지, PDF는 같은 원본에 필기 따로) */
+    fun duplicate(doc: Doc) {
+        val id = doc.libId ?: doc.id
+        val n = Y.lib.notes.find { it.id == id } ?: run { Overlay.toast("복제할 수 없어요"); return }
+        val nid = Y.uid()
+        listOf("n", "q", "qs").forEach { k -> kr.yeobaek.note.data.Store.getRaw("$k/$id.json")?.let { kr.yeobaek.note.data.Store.setRaw("$k/$nid.json", it) } }
+        if (n.kind == "pdf") kr.yeobaek.note.data.Store.file("blobs/$id.pdf").takeIf { it.exists() }?.copyTo(kr.yeobaek.note.data.Store.file("blobs/$nid.pdf"), true)
+        val m = kr.yeobaek.note.data.NoteMeta(nid, Y.clean(n.title) + " 사본", n.cover, n.kind, n.tpl, n.folder, false, false, null,
+            System.currentTimeMillis(), System.currentTimeMillis(), n.pageCount, n.score, if (n.kind == "pdf") (n.key ?: id) + ":" + nid else n.key, n.thumb)
+        if (n.kind == "pdf") n.key?.let { k -> kr.yeobaek.note.data.Store.getRaw("p/${Y.keyFile(k)}.json")?.let { kr.yeobaek.note.data.Store.setRaw("p/${Y.keyFile(m.key!!)}.json", it) } }
+        Y.lib.notes.add(0, m); Y.saveLib(); Y.haptic(10)
+        Overlay.toast("‘${Y.clean(m.title)}’를 만들었어요")
+    }
+
+    /** 열린 문서를 휴지통으로: 탭도 닫음 */
+    fun trashOpen(doc: Doc) {
+        val id = doc.libId ?: doc.id
+        val n = Y.lib.notes.find { it.id == id } ?: return
+        n.trashed = true; n.trashedAt = System.currentTimeMillis(); Y.saveLib()
+        tabs.filter { it.doc === doc }.forEach { closeTab(it) }
+        Overlay.toast("휴지통으로 옮겼어요", "되돌리기", 4500) { n.trashed = false; n.trashedAt = null; Y.saveLib() }
+    }
+
     /* ---------- 시스템이 앱을 정리했다가 다시 열 때: 열어 둔 문서로 ---------- */
     /** 지금 열린 탭(서재 id)과 보고 있던 탭을 Bundle에 */
     fun saveState(b: android.os.Bundle) {

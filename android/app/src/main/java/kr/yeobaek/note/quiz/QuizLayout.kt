@@ -286,7 +286,7 @@ object QuizLayout {
             p.img?.let { m -> drawImg(cv, m.src, (b.width * L - lp(m.w)) / 2, b.imgY, lp(m.w), lp(m.h), c) }
             return
         }
-        val sel = qs.sel[key]; val rev = qs.rev[key]?.get("ans") == 1; val g = qs.grade[key]
+        val sel = qs.sel[key]; val rev = qs.rev[key]?.get("ans") == 1 || qs.show; val g = qs.grade[key]
         if (peek) { paint.reset(); paint.isAntiAlias = true; paint.color = if (c.dark) 0x14FFFFFF else 0x0A212529; val r = lp(8f); cv.drawRoundRect(RectF(-lp(4f), -lp(2f), b.width * L + lp(4f), b.headH + lp(2f)), r, r, paint) }
         // 번호
         val nl = b.noL!!
@@ -339,8 +339,15 @@ object QuizLayout {
             cv.save(); cv.translate(bx - lp(8f) - lab.getLineWidth(0), by - lab.height); lab.draw(cv); cv.restore()
             paint.reset(); paint.color = c.line; paint.strokeWidth = lp(.9f); cv.drawLine(bx, by - lp(.45f), bx + lineW, by - lp(.45f), paint)
             if (rev) {
-                val al = Tex.layout(Tex.build(p.answer, lp(16f), c.red, Fonts.w(700)), lineW.toInt(), lp(16f), c.red, 700, 0f, Layout.Alignment.ALIGN_CENTER)
-                cv.save(); cv.translate(bx, by - lp(2f) - al.height); al.draw(cv); cv.restore()
+                // 답이 길면: 칸을 왼쪽으로 넓히고 글자를 줄이고, 그래도 넘치면 잘라서 "…" (문항 글자 위로 넘쳐 나오지 않게)
+                val maxH = lp(40f)
+                var fs = 16f; var w = lineW; var src = p.answer
+                fun lay() = Tex.layout(Tex.build(src, lp(fs), c.red, Fonts.w(700)), w.toInt(), lp(fs), c.red, 700, 0f, if (w == lineW) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_OPPOSITE)
+                var al = lay()
+                if (al.height > maxH) { w = b.width * L * .9f; al = lay() }
+                while (al.height > maxH && fs > 9f) { fs -= 1f; al = lay() }
+                while (al.height > maxH && src.length > 6) { src = src.take((src.length * .8f).toInt()).trimEnd() + "…"; al = lay() }
+                cv.save(); cv.translate(bx + lineW - w, by - lp(2f) - al.height); al.draw(cv); cv.restore()
             }
         }
     }

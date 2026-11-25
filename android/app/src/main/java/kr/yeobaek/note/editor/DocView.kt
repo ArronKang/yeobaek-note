@@ -68,6 +68,9 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
     var rootX = 0f; var rootY = 0f
     /** 저지연 필기 층 (DocFrame이 붙여 줌) */
     var front: FrontInk? = null
+    /** 자를 화면에 꺼냄 */
+    var rulerOn = false
+    fun setRuler(on: Boolean) { rulerOn = on; invalidate() }
     private fun frontOn() = front?.ok == true
     /** 펜을 뗀 뒤: 아래 화면이 같은 획을 그릴 때까지 몇 프레임 기다렸다가 지움 */
     private fun clearFrontLater() { front?.clearSoon() }
@@ -493,7 +496,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         } } }
         val cu = cur
         if (cu != null && cu.pi == i) {
-            cu.st?.let { st -> if (st.t == "hl" || !cu.liveBaked || sharpOver) Ink.draw(cv, st, K, dark) else Ink.draw(cv, st, K, dark, from = cu.baked) }
+            cu.st?.let { st -> if (Ink.whole(st) || !cu.liveBaked || sharpOver) Ink.draw(cv, st, K, dark) else Ink.draw(cv, st, K, dark, from = cu.baked) }
             cu.pred?.let { Ink.draw(cv, it, K, dark) }
             cu.lasso?.let { pts ->
                 p.reset(); p.isAntiAlias = true; p.style = Paint.Style.STROKE; p.strokeWidth = dp(1.6f); p.color = c.acc; p.strokeJoin = Paint.Join.ROUND
@@ -911,7 +914,7 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
             invalidate(); return
         }
         val pen = YY.curPen()
-        val st = Stroke(pen.kind, pen.color, pen.mm / YY.MM, if (pen.kind == "hl") pen.alpha else 1f, if (pen.kind == "pen" && pen.type != null && pen.type != "ball") pen.type else null, mutableListOf(pt))
+        val st = Stroke(pen.kind, pen.color, pen.mm / YY.MM, pen.alpha.coerceIn(0.05f, 1f), if (pen.kind == "pen" && pen.type != null && pen.type != "ball") pen.type else null, mutableListOf(pt))
         if (pen.kind == "pen") st.live = true
         c.st = st
         if (tool == "pen") { predictor = predictor ?: runCatching { MotionEventPredictor.newInstance(this) }.getOrNull(); predictor?.record(ev) }
@@ -990,8 +993,8 @@ class DocView(ctx: Context, val doc: Doc, private val host: Host) : View(ctx) {
         for (h in 0 until ev.historySize) addPt(ev.getHistoricalX(i, h), ev.getHistoricalY(i, h), ev.getHistoricalPressure(i, h))
         addPt(x, y, ev.getPressure(i))
         // 볼펜·만년필은 지나간 마디를 바로 캐시에 구워서 매 프레임 다시 그리지 않음
-        if (st.t == "pen") bakeLive(c, st)
-        if (st.t == "pen" && frontOn()) {
+        if (st.t == "pen" && !Ink.whole(st)) bakeLive(c, st)
+        if (st.t == "pen" && !Ink.whole(st) && frontOn()) {
             // 모양이 정해진 마디(..n-2)를 화면 합성을 거치지 않고 바로 그림
             val n = st.p.size
             if (n >= 2 && c.frontTo < n - 1) {

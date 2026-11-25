@@ -47,6 +47,11 @@ object Ink {
         val dx = b[0] - a[0]; val dy = b[1] - a[1]; val len = hypot(dx, dy)
         return when (st.k) {
             "fine" -> max(0.6f, base * 0.8f)
+            "pencil" -> {                           // 연필: 가늘고 누르는 힘에 따라 조금 굵어짐
+                val taper = min(1f, min((k + 2) / 4f, (n - k + 1) / 4f))
+                max(0.5f, base * (0.6f + pr * 0.7f) * (0.6f + 0.4f * taper))
+            }
+            "marker" -> max(0.8f, base)             // 마커: 늘 같은 굵기
             "fountain" -> {                         // 45° 납작 촉: 방향에 따라 굵기
                 val ang = if (len > 0) atan2(dy, dx) else 0f
                 val t = min(1f, min((k + 2) / 4f, (n - k + 1) / 4f))
@@ -88,15 +93,44 @@ object Ink {
             cv.drawPath(path, paint)
             return
         }
-        if (alphaMul < 1f) paint.alpha = (255 * alphaMul).roundToInt()
-        if (n == 1) { if (from == 0) { paint.style = Paint.Style.FILL; cv.drawCircle(P[0][0] * K, P[0][1] * K, max(0.7f, st.s * K / 2), paint) }; return }
+        // 투명도가 있는 펜·연필: 획 전체를 한 겹(레이어)에 불투명하게 그린 뒤 한 번에 투명도를 줌 (마디마다 겹쳐 진해지지 않게)
+        val layered = st.a < 0.999f || st.k == "pencil"
+        var saved = -1
+        if (layered) {
+            val bb = bbox(listOf(st)); val pad = st.s * K * 2 + 4
+            val a = (255 * st.a * alphaMul * (if (st.k == "pencil") 0.92f else 1f)).roundToInt().coerceIn(0, 255)
+            saved = cv.saveLayerAlpha(bb[0] * K - pad, bb[1] * K - pad, bb[2] * K + pad, bb[3] * K + pad, a)
+        } else if (alphaMul < 1f) paint.alpha = (255 * alphaMul).roundToInt()
+        if (n == 1) {
+            if (from == 0 || layered) { paint.style = Paint.Style.FILL; cv.drawCircle(P[0][0] * K, P[0][1] * K, max(0.7f, st.s * K / 2), paint) }
+            if (saved >= 0) { if (st.k == "pencil") grain(cv, paint, st, K); cv.restoreToCount(saved) }
+            return
+        }
         paint.style = Paint.Style.STROKE; paint.strokeCap = Paint.Cap.ROUND
-        for (j in max(0, from) until min(n, to)) {
+        for (j in (if (layered) 0 else max(0, from)) until (if (layered) n else min(n, to))) {
             val a = anc(P, j); val b = anc(P, j + 1); val c = P[j]
             paint.strokeWidth = segWidth(st, j, K)
             path.reset(); path.moveTo(a[0] * K, a[1] * K); path.quadTo(c[0] * K, c[1] * K, b[0] * K, b[1] * K)
             cv.drawPath(path, paint)
         }
+        if (saved >= 0) { if (st.k == "pencil") grain(cv, paint, st, K); cv.restoreToCount(saved) }
+    }
+
+    /** 이 획은 늘 처음부터 다시 그려야 함(겹쳐 그리면 진해지는 획) */
+    fun whole(st: Stroke) = st.t == "hl" || st.a < 0.999f || st.k == "pencil"
+
+    // 연필 결: 종이 좌표에 고정된 잡티 무늬로 획을 군데군데 덜어냄 (같은 자리는 늘 같은 결)
+    private val noise: android.graphics.Bitmap by lazy {
+        val s = 96; val r = java.util.Random(7); val px = IntArray(s * s)
+        for (i in px.indices) { val v = r.nextFloat(); val a = if (v < .18f) (v / .18f * 150).toInt() else 0; px[i] = Color.argb(a, 0, 0, 0) }
+        android.graphics.Bitmap.createBitmap(px, s, s, android.graphics.Bitmap.Config.ARGB_8888)
+    }
+    private val tlGrain = ThreadLocal.withInitial { Paint().apply { shader = android.graphics.BitmapShader(noise, android.graphics.Shader.TileMode.REPEAT, android.graphics.Shader.TileMode.REPEAT); blendMode = BlendMode.DST_OUT } }
+    private fun grain(cv: Canvas, p: Paint, st: Stroke, K: Float) {
+        val g = tlGrain.get()!!
+        val bb = bbox(listOf(st)); val pad = st.s * K * 2 + 4
+        val m = android.graphics.Matrix(); val k = (K / 800f).coerceIn(.6f, 3f); m.setScale(k, k); g.shader.setLocalMatrix(m)
+        cv.drawRect(bb[0] * K - pad, bb[1] * K - pad, bb[2] * K + pad, bb[3] * K + pad, g)
     }
 
     /* ---------- 기하 ---------- */
@@ -171,6 +205,10 @@ object Ink {
     }
 
     /** S Pen 압력: 약하게 눌러도 선이 끊기지 않도록 완만한 곡선 */
-    fun pressure(isPen: Boolean, p: Float): Float =
-        if (isPen && p > 0f) min(1f, 0.12f + 0.88f * p.pow(0.75f)) else 0.5f
+    /** 필압 민감도(설정): 낮음은 세게 눌러야 굵어지고, 높음은 살짝만 눌러도 굵어짐 */
+    fun pressure(isPen: Boolean, p: Float): Float {
+        if (!isPen || p <= 0f) return 0.5f
+        val g = when (kr.yeobaek.note.Y.settings.pressure) { "low" -> 1.1f; "high" -> 0.5f; else -> 0.75f }
+        return min(1f, 0.12f + 0.88f * p.pow(g))
+    }
 }

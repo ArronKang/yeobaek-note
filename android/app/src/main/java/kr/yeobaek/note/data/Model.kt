@@ -119,7 +119,15 @@ class Settings(
     var trashDays: Int = 30,
     var hlSnap: Boolean = true,
     var dark: String = "off",       // off | on | auto
-    var glass: String = "mid",      // 도구 막대: clear(투명) | mid(반투명) | solid(불투명)
+    var glass: String = "mid",      // 도구 막대: clear(투명) | mid(반투명) | solid(불투명) (옛 값, glassPct가 우선)
+    var glassPct: Int = -1,         // 도구 막대 투명도 % (0 = 투명 ~ 100 = 불투명), -1이면 glass 값에서
+    var dock: String = "top",       // 펜 막대 자리: top(탭에 붙음) | float | bottom | left | right
+    var dockX: Float = -1f, var dockY: Float = -1f,   // float일 때 왼쪽 위 (dp)
+    var scale: Boolean = true,      // 위쪽 페이지 눈금(3 / 12)
+    var ruler: Boolean = true,      // 펜 막대에 자 넣기
+    var recent: MutableList<String> = mutableListOf("#000000", "#157EFA", "#53D669", "#FED031", "#FC3142"),  // 최근 색 (처음엔 원본 막대 배치)
+    var saved: MutableList<String> = mutableListOf("#34C759", "#FFCC00", "#FF8D28", "#FF383C", "#CB30E0", "#0088FF", "#6155F5", "#FF2D55"), // 색 창 아래 저장 색 (Apple 키트 기본)
+    var pressure: String = "mid",   // 필압 민감도: low | mid | high
 )
 
 @Serializable
@@ -165,4 +173,5 @@ class QuizState(
     var star: MutableMap<String, Int> = HashMap(),
     var focus: Boolean = false,
     var scored: Boolean = false,
+    var show: Boolean = false,      // 답 보기 (모든 문항 정답 표시)
 )
